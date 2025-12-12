@@ -275,8 +275,9 @@ Phase: ${leadData.conversationPhase}`;
   const handleOptionClick = async (option: string) => {
     trackActivity();
     
-    // Handle multi-select
     const lastMessage = messages[messages.length - 1];
+    
+    // Handle multi-select - only toggle if NOT clicking Done
     if (lastMessage?.multiSelect && option !== "Done") {
       setSelectedOptions(prev =>
         prev.includes(option) ? prev.filter(i => i !== option) : [...prev, option]
@@ -284,20 +285,25 @@ Phase: ${leadData.conversationPhase}`;
       return;
     }
     
-    // If Done on multi-select
-    if (option === "Done" && selectedOptions.length > 0) {
-      addUserMessage(selectedOptions.join(", "));
+    // Determine what to send to AI
+    let userContent = option;
+    let displayMessage = option;
+    
+    // If Done on multi-select, send the selected options
+    if (option === "Done" && lastMessage?.multiSelect) {
+      const selections = selectedOptions.length > 0 ? selectedOptions.join(", ") : "None selected";
+      userContent = selections;
+      displayMessage = selections;
       setSelectedOptions([]);
-    } else {
-      addUserMessage(option);
     }
     
+    addUserMessage(displayMessage);
     setIsTyping(true);
     
     try {
       const response = await sendToAlex([
         { role: "assistant", content: lastMessage?.text || "" },
-        { role: "user", content: option === "Done" ? selectedOptions.join(", ") : option }
+        { role: "user", content: userContent }
       ]);
       
       // Add human-like delay before showing response

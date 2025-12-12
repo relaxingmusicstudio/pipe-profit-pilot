@@ -10,8 +10,9 @@ const SYSTEM_PROMPT = `You are Alex, a friendly AI sales consultant for ApexLoca
 
 RULES:
 - Be conversational and brief
-- Follow the conversation flow exactly
-- Extract data when provided
+- Follow the conversation flow
+- Accept free-text answers AND button clicks - they're equivalent
+- If user types something that matches a step, move forward (e.g., "7" for team size = "6-10")
 
 CONVERSATION FLOW:
 
@@ -26,6 +27,7 @@ Step 3 (trade after name): "Nice to meet you, [name]! What's your trade?"
 
 Step 4 (team size): "Got it. What's your team size?"
 → Buttons: ["Solo", "2-5", "6-10", "10+ trucks"]
+→ If user types a number, map it: 1="Solo", 2-5="2-5", 6-10="6-10", 10+="10+ trucks"
 
 Step 5 (call volume): "And roughly how many calls come in per month?"
 → Buttons: ["<50", "50-100", "100-200", "200+"]
@@ -35,8 +37,9 @@ Step 6 (timeline): "When are you looking to get started?"
 
 Step 7 (interests): "What services interest you most? Pick all that apply, then tap Done."
 → Buttons: ["Website SEO", "Google Maps SEO", "Paid Ads", "Sales Funnels", "Websites That Convert", "Done"]
+→ When user says "Done" or sends a comma-separated list, move to Step 8
 
-Step 8 (aha moment after Done): Calculate loss based on call volume (<50=$4k, 50-100=$8k, 100-200=$16k, 200+=$32k).
+Step 8 (aha moment): Calculate loss based on call volume (<50=$4k, 50-100=$8k, 100-200=$16k, 200+=$32k).
 "Thanks [name]! Here's what the data shows: [trade] businesses miss about 27% of calls, and 80% of those go to competitors. At your volume, that could be $[loss]/month walking away. Does that track?"
 → Buttons: ["Yeah, that's a problem", "Sounds about right", "Not really"]
 
@@ -51,6 +54,12 @@ Step 11 (email): "And email for the proposal?"
 
 Step 12 (complete): "Awesome, [name]! You're all set. Our pricing, demo, and calculator are on the page. I'll be here if you have questions! 👌"
 → Buttons: ["Show me pricing", "Tell me about voice cloning"]
+→ This is the FINAL step. After this, answer any questions naturally without repeating this message.
+
+POST-COMPLETION QUESTIONS (after Step 12):
+- "Show me pricing" → Tell them about Starter $497/mo and Professional $1,497/mo plans, then offer to answer more questions
+- "Tell me about voice cloning" → Explain we can clone their voice or use premium voice library for their AI agent
+- Any other question → Answer helpfully using your knowledge, DON'T repeat the completion message
 
 If "Just looking": "All good! I'm here if anything comes up. Feel free to look around. 👋"
 → Buttons: ["Actually, I have a question", "Thanks!"]`;
@@ -71,7 +80,7 @@ const responseTool = {
         suggestedActions: {
           type: "array",
           items: { type: "string" },
-          description: "Array of button labels. REQUIRED for most steps. Only null for name/businessName/phone/email inputs."
+          description: "Array of button labels. Include for most steps. Null only for name/businessName/phone/email inputs."
         },
         extractedData: {
           type: "object",
@@ -80,8 +89,8 @@ const responseTool = {
         },
         conversationPhase: {
           type: "string",
-          enum: ["opener", "diagnostic", "aha_moment", "contact_capture", "complete", "exit"],
-          description: "Current phase of the conversation"
+          enum: ["opener", "diagnostic", "aha_moment", "contact_capture", "complete", "post_complete"],
+          description: "Current phase. Use 'post_complete' for questions after the flow is done."
         }
       },
       required: ["text", "conversationPhase"]
@@ -105,10 +114,18 @@ serve(async (req) => {
     // Build context with lead data
     let contextPrompt = SYSTEM_PROMPT;
     if (leadData && Object.keys(leadData).length > 0) {
-      contextPrompt += `\n\nCURRENT LEAD DATA: ${JSON.stringify(leadData)}`;
+      contextPrompt += `\n\nCURRENT LEAD DATA (already collected - don't ask for this info again): ${JSON.stringify(leadData)}`;
+      
+      // Tell AI which phase we're in
+      if (leadData.conversationPhase) {
+        contextPrompt += `\n\nCURRENT PHASE: ${leadData.conversationPhase}`;
+        if (leadData.conversationPhase === "complete") {
+          contextPrompt += "\nIMPORTANT: The qualification flow is COMPLETE. Answer any follow-up questions naturally without repeating the completion message.";
+        }
+      }
     }
 
-    console.log("Sending request to AI with messages:", JSON.stringify(messages));
+    console.log("Sending to AI, last user message:", messages[messages.length - 1]?.content);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -150,7 +167,7 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log("AI response:", JSON.stringify(data));
+    console.log("AI raw response:", JSON.stringify(data).substring(0, 500));
 
     // Extract tool call response
     const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
@@ -158,7 +175,7 @@ serve(async (req) => {
     if (toolCall && toolCall.function?.arguments) {
       try {
         const parsedResponse = JSON.parse(toolCall.function.arguments);
-        console.log("Parsed tool response:", JSON.stringify(parsedResponse));
+        console.log("Parsed response phase:", parsedResponse.conversationPhase, "actions:", parsedResponse.suggestedActions);
         
         return new Response(JSON.stringify({
           text: parsedResponse.text || "Let me think...",
@@ -176,7 +193,7 @@ serve(async (req) => {
     // Fallback: try to parse content directly
     const content = data.choices?.[0]?.message?.content;
     if (content) {
-      console.log("Falling back to content parsing:", content);
+      console.log("Falling back to content parsing:", content.substring(0, 200));
       try {
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
