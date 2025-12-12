@@ -80,24 +80,24 @@ const handler = async (req: Request): Promise<Response> => {
       tags: tags,
       // Tags as comma-separated string for GHL mapping
       tags_string: tags.join(", "),
-      // Custom fields for all qualification data
+      // Custom fields matching GHL field names exactly
       customField: {
         message: message,
-        business_type: businessType || "",
-        team_size: teamSize || "",
-        call_volume: callVolume || "",
-        ai_timeline: aiTimeline || "",
-        interests: interests?.join(", ") || "",
+        "Services Offered": businessType || "",
+        "Team Size": teamSize || "",
+        "Call Volume": callVolume || "",
+        "AI Timeline": aiTimeline || "",
+        "Interests": interests?.join(", ") || "",
         tags: tags.join(", "),
       },
       // Also send flat versions for flexible mapping
       name: name,
       message: message,
-      business_type: businessType || "",
-      team_size: teamSize || "",
-      call_volume: callVolume || "",
-      ai_timeline: aiTimeline || "",
-      interests: interests?.join(", ") || "",
+      "Services Offered": businessType || "",
+      "Team Size": teamSize || "",
+      "Call Volume": callVolume || "",
+      "AI Timeline": aiTimeline || "",
+      "Interests": interests?.join(", ") || "",
       timestamp: new Date().toISOString(),
     };
     console.log("Webhook payload:", JSON.stringify(webhookPayload));
