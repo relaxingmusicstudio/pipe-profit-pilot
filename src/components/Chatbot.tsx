@@ -41,29 +41,11 @@ const ALEX_AVATAR = "/alex-avatar.png";
 
 const Chatbot = () => {
   const { toast } = useToast();
-  // Session storage keys
-  const STORAGE_KEY = "apexlocal_chatbot_session";
-  
-  // Load initial state from sessionStorage
-  const loadSessionState = () => {
-    try {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.error("Error loading chat session:", e);
-    }
-    return null;
-  };
-
-  const savedSession = loadSessionState();
-  
   const [isOpen, setIsOpen] = useState(false);
-  const [hasAutoOpened, setHasAutoOpened] = useState(savedSession?.hasAutoOpened || false);
-  const [messages, setMessages] = useState<Message[]>(savedSession?.messages || []);
+  const [hasAutoOpened, setHasAutoOpened] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
-  const [leadData, setLeadData] = useState<LeadData>(savedSession?.leadData || {
+  const [leadData, setLeadData] = useState<LeadData>({
     name: "",
     businessName: "",
     email: "",
@@ -81,8 +63,8 @@ const Chatbot = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
-  const [hasSubmitted, setHasSubmitted] = useState(savedSession?.hasSubmitted || false);
-  const [conversationHistory, setConversationHistory] = useState<Array<{ role: string; content: string }>>(savedSession?.conversationHistory || []);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState<Array<{ role: string; content: string }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastActivityRef = useRef<number>(Date.now());
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -94,18 +76,6 @@ const Chatbot = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
-
-  // Persist state to sessionStorage
-  useEffect(() => {
-    const stateToSave = {
-      messages,
-      leadData,
-      hasSubmitted,
-      conversationHistory,
-      hasAutoOpened,
-    };
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
-  }, [messages, leadData, hasSubmitted, conversationHistory, hasAutoOpened]);
 
   // Auto-open after 15s or 500px scroll
   useEffect(() => {
