@@ -30,8 +30,8 @@ const contactSchema = z.object({
 type ContactFormData = z.infer<typeof contactSchema>;
 
 const businessTypes = [
-  "Plumbing",
   "HVAC",
+  "Plumbing",
   "Electrical",
   "Roofing",
   "Other",
@@ -187,7 +187,7 @@ const ContactForm = () => {
               <span className="text-sm font-medium">Get in Touch</span>
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Ready to Transform Your Business? <span className="text-accent">Let's Talk</span>
+              Ready to Transform Your HVAC Business? <span className="text-accent">Let's Talk</span>
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
               Tell us about your business and we'll show you exactly how AI can help you capture more leads and grow revenue.

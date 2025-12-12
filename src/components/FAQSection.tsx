@@ -8,59 +8,54 @@ import { HelpCircle } from "lucide-react";
 
 const faqs = [
   {
-    question: "What is an AI voice agent for plumbers?",
+    question: "What is an AI voice agent for HVAC companies?",
     answer:
-      "Think of it as your best receptionist who never sleeps, never calls in sick, and never has a bad day. An AI voice agent answers your phone 24/7, talks to customers naturally, books jobs on your calendar, and even upsells services like water heater flushes or drain maintenance. The difference? It costs a fraction of a full-time employee and works every single night, weekend, and holiday.",
+      "Think of it as your best dispatcher who never sleeps, never calls in sick, and never has a bad day. An AI voice agent answers your phone 24/7, talks to customers naturally, books jobs on your calendar, and even upsells services like preventative maintenance or system tune-ups. The difference? It costs a fraction of a full-time employee and works every single night, weekend, and holiday—including those extreme weather days when call volume spikes 300-400%.",
   },
   {
-    question: "How much does a missed call cost a plumbing business?",
+    question: "How much does a missed call cost an HVAC business?",
     answer:
-      "Here's the math that keeps plumbers up at night: the average service call is worth $350-$500, but emergency jobs? Those run $800-$3,000. Miss just one emergency call a week, and you're leaving $50,000+ on the table every year. The real kicker? 85% of people who can't reach you won't bother leaving a voicemail—they'll just call the next plumber on Google.",
+      "Here's the math that keeps HVAC contractors up at night: the average HVAC repair costs $351, but emergency jobs during peak season? Those run $500-$1,500. System replacements average $8,000-$15,000. With the industry missing 27% of calls and 80% of those callers going to competitors, you're potentially losing $7,500+ per month. The customer lifetime value in HVAC is $15,340—miss one customer and you lose years of maintenance contracts and referrals.",
   },
   {
     question: "How quickly can I get an AI voice agent set up?",
     answer:
-      "We handle everything in 48 hours, start to finish. No tech headaches on your end. We'll hop on a quick call to learn your business, then our team builds and trains your custom AI agent with your pricing, service area, and booking preferences. By day three, you're capturing calls you used to miss.",
+      "We handle everything in 48 hours, start to finish. No tech headaches on your end. We'll hop on a quick call to learn your business, then our team builds and trains your custom AI agent with your pricing, service area, and booking preferences. By day three, you're capturing those emergency AC calls at 2 AM and heating emergencies during cold snaps.",
   },
   {
-    question: "Does the AI voice agent sound robotic?",
+    question: "Can the AI handle emergency HVAC calls?",
     answer:
-      "This isn't your grandma's automated phone tree. Our AI uses the same technology behind ChatGPT but optimized for natural phone conversations. Customers genuinely can't tell the difference—we've had business owners call to test it and get fooled by their own AI. It handles interruptions, asks follow-up questions, and even laughs at jokes.",
+      "Absolutely—this is where it really shines. The AI is trained to recognize urgency words like 'no AC,' 'furnace not working,' 'no heat with kids at home,' or 'smell gas.' It immediately prioritizes these calls, gathers critical info (address, system type, symptoms), and can text or call your on-call technician within seconds. During extreme weather when call volume spikes 300-400%, your AI handles every single call without breaking a sweat.",
   },
   {
-    question: "Can the AI handle emergency plumbing calls?",
+    question: "Does the AI understand HVAC-specific questions?",
     answer:
-      "Absolutely—this is where it really shines. The AI is trained to recognize urgency words like 'flooding,' 'burst pipe,' or 'no hot water with a newborn.' It immediately prioritizes these calls, gathers the critical info (address, access instructions, what's happening), and can text or call your on-call tech within seconds. No more middle-of-the-night calls waking up your whole house.",
+      "Your AI is trained on YOUR business—it knows your service area, pricing for repairs vs. replacements, which HVAC brands you work on, and your availability. It can answer questions about heat pump efficiency, explain why a system might be short-cycling, and even discuss energy rebates in your area. It's not a generic bot; it's YOUR virtual dispatcher who speaks fluent HVAC.",
   },
   {
-    question: "What happens if the AI can't answer a question?",
+    question: "How does the AI qualify repair vs. replacement opportunities?",
     answer:
-      "The AI knows what it knows—and more importantly, knows what it doesn't. If a customer asks something outside its training (like a super technical question about your sump pump brand compatibility), it'll professionally say 'Let me have our team get back to you on that' and schedule a callback. It never makes stuff up or gives wrong information that could burn you.",
+      "The AI is trained to ask the right probing questions: 'How old is your system?' 'Has it needed repairs recently?' 'Are you noticing higher energy bills?' When a system is 10-15 years old and showing signs of wear, the AI flags it as a replacement opportunity and can mention your efficiency upgrade options. With heat pumps outselling gas furnaces since 2021, this qualification is more valuable than ever.",
+  },
+  {
+    question: "What about the 110,000 technician shortage? Can AI help?",
+    answer:
+      "The HVAC industry needs 110,000 more technicians—they don't exist. AI doesn't replace your techs; it makes them 10-15 hours per week more efficient by eliminating phone tag, booking callbacks, and ensuring every lead is captured and qualified. Your technicians stay focused on installations and repairs while the AI handles the front office chaos.",
   },
   {
     question: "Will the AI work with my existing scheduling software?",
     answer:
-      "We integrate with pretty much everything plumbers actually use—ServiceTitan, Housecall Pro, Jobber, Google Calendar, you name it. During setup, we connect directly to your system so when the AI books a job, it shows up on your calendar instantly. No double-booking, no manual entry, no 'oops, I forgot to add that appointment.'",
+      "We integrate with everything HVAC contractors actually use—ServiceTitan, Housecall Pro, Jobber, Google Calendar, Calendly, you name it. During setup, we connect directly to your system so when the AI books a job, it shows up on your calendar instantly. No double-booking, no manual entry, no 'oops, I forgot to add that appointment.'",
   },
   {
-    question: "How does the AI know my pricing and services?",
+    question: "What happens during peak season when call volume explodes?",
     answer:
-      "During onboarding, we do a deep dive into your business. You tell us your service area, pricing tiers, what services you offer (and which ones you want to push), your availability, and any special instructions. We then train your AI specifically on YOUR business—it's not a generic bot, it's YOUR virtual dispatcher who knows that you charge $99 for drain cleaning and don't service anything north of Highway 50.",
-  },
-  {
-    question: "What if I want to change something after setup?",
-    answer:
-      "Business changes, we get it. New pricing for the busy season? Hired another tech and expanded your service area? Just shoot us a message and we'll update your AI within 24 hours. Most changes are included in your plan—we're not going to nickel-and-dime you every time you want to tweak something.",
+      "This is your secret weapon. While competitors let calls go to voicemail during the first heat wave or cold snap, your AI answers every single one—even when volume spikes 300-400%. No busy signals, no hold music, no frustrated customers calling the next company. You capture the surge while others scramble.",
   },
   {
     question: "Is there a long-term contract or commitment?",
     answer:
-      "Nope, and that's intentional. We're confident enough in what we deliver that we don't need to lock you in. It's month-to-month, cancel anytime. That said, once you see your after-hours calls turning into booked jobs, you're not going to want to go back to voicemail purgatory.",
-  },
-  {
-    question: "How do I know the AI is actually working?",
-    answer:
-      "You get a dashboard that shows everything: how many calls came in, how many got booked, what times people are calling, even recordings of the conversations (with customer consent, of course). Most owners tell us they're shocked at how many calls they were missing at 6 AM or 9 PM. The data doesn't lie—you'll see exactly what the AI is doing for you.",
+      "Nope, and that's intentional. We're confident enough in what we deliver that we don't need to lock you in. It's month-to-month, cancel anytime. That said, once you see your after-hours emergency calls turning into booked jobs and system replacements, you're not going to want to go back to voicemail purgatory.",
   },
 ];
 
@@ -82,7 +77,7 @@ const FAQSection = () => {
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
             Get answers to the most common questions about our AI voice agents
-            for plumbing businesses.
+            for HVAC businesses.
           </p>
         </div>
 

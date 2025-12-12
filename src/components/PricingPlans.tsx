@@ -7,7 +7,7 @@ const PricingPlans = () => {
       name: "STARTER",
       price: "$497",
       period: "/mo",
-      bestFor: "Solo plumber / 1 truck",
+      bestFor: "Solo HVAC technician / 1 truck",
       icon: Wrench,
       popular: false,
       features: [
@@ -24,7 +24,7 @@ const PricingPlans = () => {
       name: "PROFESSIONAL",
       price: "$1,497",
       period: "/mo",
-      bestFor: "2-4 truck operations",
+      bestFor: "2-4 truck HVAC operations",
       icon: Rocket,
       popular: true,
       features: [
@@ -139,7 +139,7 @@ const PricingPlans = () => {
               <div className="flex items-center justify-center gap-3 mb-4">
                 <Phone className="w-6 h-6 text-primary" />
                 <span className="text-lg font-semibold text-foreground">
-                  Running a larger operation?
+                  Running a larger HVAC operation?
                 </span>
               </div>
               <Button 

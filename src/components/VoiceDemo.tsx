@@ -4,16 +4,16 @@ import { Play, Pause, Volume2, CheckCircle, Clock, Search, Bot, Phone } from "lu
 import LiveVideoCall from "@/components/LiveVideoCall";
 
 const transcriptData = [
-  { time: 0, speaker: "Customer", text: "Hello? I have water everywhere! My pipe just burst!", emotion: "urgent" },
+  { time: 0, speaker: "Customer", text: "Hello? My AC just stopped working and it's 95 degrees in here!", emotion: "urgent" },
   { time: 4, speaker: "AI", text: "I'm so sorry to hear that! I'm dispatching our emergency team right now. Can you tell me your address?", action: "empathy" },
-  { time: 10, speaker: "Customer", text: "It's 1234 Oak Street. Please hurry!", emotion: "stressed" },
-  { time: 14, speaker: "AI", text: "Got it - 1234 Oak Street. I have a certified technician 30 minutes away. The emergency dispatch fee is $149. Shall I book you in right now?", action: "booking" },
-  { time: 24, speaker: "Customer", text: "Yes, please! Whatever it takes!", emotion: "relieved" },
-  { time: 28, speaker: "AI", text: "You're all set. Mike will be there by 8:30 PM. While he's there, would you like a complimentary water pressure check to prevent future issues?", action: "upsell" },
+  { time: 10, speaker: "Customer", text: "It's 4521 Maple Drive. We have a baby at home, please hurry!", emotion: "stressed" },
+  { time: 14, speaker: "AI", text: "Got it - 4521 Maple Drive. I have a certified HVAC technician 25 minutes away. The emergency dispatch fee is $149. Shall I book you in right now?", action: "booking" },
+  { time: 24, speaker: "Customer", text: "Yes, absolutely! Whatever it takes!", emotion: "relieved" },
+  { time: 28, speaker: "AI", text: "You're all set. Mike will be there by 7:30 PM. While he's there, would you like a complimentary system efficiency check to prevent future breakdowns?", action: "upsell" },
   { time: 38, speaker: "Customer", text: "That would be great, thank you!", emotion: "happy" },
-  { time: 42, speaker: "AI", text: "Is this an older home? We specialize in proactive pipe inspections that could save you thousands.", action: "probe" },
-  { time: 50, speaker: "Customer", text: "It is, actually. Built in the 70s.", emotion: "interested" },
-  { time: 54, speaker: "AI", text: "I'll have Mike discuss our comprehensive inspection package. You'll get a text confirmation shortly. We're on our way!", action: "close" },
+  { time: 42, speaker: "AI", text: "Is your system over 10 years old? We specialize in heat pump upgrades that could save you 30% on energy costs.", action: "probe" },
+  { time: 50, speaker: "Customer", text: "It is, actually. About 15 years old.", emotion: "interested" },
+  { time: 54, speaker: "AI", text: "Perfect timing! I'll have Mike discuss our energy-efficient replacement options. You'll get a text confirmation shortly. We're on our way!", action: "close" },
 ];
 
 const VoiceDemo = () => {
@@ -67,7 +67,7 @@ const VoiceDemo = () => {
   const stats = [
     { icon: CheckCircle, label: "Job Booked", value: "+$1,295", color: "text-accent" },
     { icon: Clock, label: "Time Saved", value: "18 min", color: "text-primary" },
-    { icon: Search, label: "Upsell Potential", value: "+$350", color: "text-accent" },
+    { icon: Search, label: "Upsell Potential", value: "+$8,500", color: "text-accent" },
   ];
 
   return (
@@ -78,7 +78,7 @@ const VoiceDemo = () => {
             Hear Your Future <span className="text-accent">24/7 Dispatcher</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            No scripts. Just results. Listen to a Friday night emergency call with a homeowner with a burst pipe.
+            No scripts. Just results. Listen to a summer evening emergency call with a homeowner whose AC just died.
           </p>
         </div>
 
@@ -101,7 +101,7 @@ const VoiceDemo = () => {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 text-primary-foreground mb-2">
                     <Volume2 className="w-5 h-5" />
-                    <span className="font-semibold">Emergency Call Demo</span>
+                    <span className="font-semibold">Emergency HVAC Call Demo</span>
                   </div>
                   
                   {/* Progress Bar */}
@@ -212,7 +212,7 @@ const VoiceDemo = () => {
           {/* Bottom CTA */}
           <div className="mt-10 text-center">
             <p className="text-muted-foreground mb-4">
-              Try an AI voice demo to see how it would work for your business.
+              Try an AI voice demo to see how it would work for your HVAC business.
             </p>
             <Button
               variant="hero"

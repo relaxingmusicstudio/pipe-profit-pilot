@@ -4,12 +4,12 @@ import { Slider } from "@/components/ui/slider";
 import { Calculator, TrendingDown, TrendingUp, Phone } from "lucide-react";
 
 const RevenueCalculator = () => {
-  const [monthlyCalls, setMonthlyCalls] = useState([200]);
-  const [avgJobValue, setAvgJobValue] = useState(850);
+  const [monthlyCalls, setMonthlyCalls] = useState([80]);
+  const [avgJobValue, setAvgJobValue] = useState(351);
   const [conversionRate, setConversionRate] = useState(30);
   const [showResults, setShowResults] = useState(false);
 
-  const missedCallRate = 0.28; // 28% missed calls industry average
+  const missedCallRate = 0.27; // 27% missed calls HVAC industry average
   const missedCalls = Math.round(monthlyCalls[0] * missedCallRate);
   const potentialJobs = Math.round(missedCalls * (conversionRate / 100));
   const lostRevenue = potentialJobs * avgJobValue;
@@ -27,7 +27,7 @@ const RevenueCalculator = () => {
             How Much Is Your Phone <span className="text-accent">Costing You?</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Calculate the revenue you're losing from missed calls right now.
+            HVAC contractors miss 27% of calls. 80% of those callers call your competitor. Calculate your revenue leak.
           </p>
         </div>
 
@@ -58,7 +58,7 @@ const RevenueCalculator = () => {
               <div className="space-y-4">
                 <label className="flex items-center gap-2 font-semibold text-foreground">
                   <TrendingUp className="w-5 h-5 text-primary" />
-                  Avg. Job Value
+                  Avg. HVAC Job Value
                 </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
