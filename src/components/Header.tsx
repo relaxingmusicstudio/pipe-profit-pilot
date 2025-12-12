@@ -26,7 +26,7 @@ const Header = () => {
             <Phone className="w-5 h-5 text-accent-foreground" />
           </div>
           <span className="text-xl font-bold text-primary-foreground">
-            [MY_COMPANY_NAME]
+            Apex<span className="text-accent">Local</span>360
           </span>
         </Link>
 

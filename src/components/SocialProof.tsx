@@ -2,9 +2,9 @@ import { Star, Quote } from "lucide-react";
 
 const SocialProof = () => {
   const testimonial = {
-    quote: "Captured $47,000 in after-hours emergency calls in our first month. The AI paid for itself in 3 days.",
+    quote: "Recovered $58k in 90 days. The AI closes leads we didn't even know we had.",
     author: "Mike R.",
-    company: "[HVAC_COMPANY_1]",
+    company: "3-Truck Plumbing Co.",
     stars: 5,
   };
 
