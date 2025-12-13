@@ -59,3 +59,12 @@ verify_jwt = false
 
 [functions.funnel-ai]
 verify_jwt = false
+
+[functions.youtube-trend-scraper]
+verify_jwt = false
+
+[functions.lead-score-refresher]
+verify_jwt = false
+
+[functions.content-calendar-checker]
+verify_jwt = false

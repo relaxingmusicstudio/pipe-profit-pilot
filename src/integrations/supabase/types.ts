@@ -252,6 +252,42 @@ export type Database = {
         }
         Relationships: []
       }
+      automation_logs: {
+        Row: {
+          completed_at: string | null
+          error_message: string | null
+          function_name: string
+          id: string
+          items_created: number | null
+          items_processed: number | null
+          metadata: Json | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          error_message?: string | null
+          function_name: string
+          id?: string
+          items_created?: number | null
+          items_processed?: number | null
+          metadata?: Json | null
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          error_message?: string | null
+          function_name?: string
+          id?: string
+          items_created?: number | null
+          items_processed?: number | null
+          metadata?: Json | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       channels: {
         Row: {
           channel_type: string
@@ -1226,6 +1262,54 @@ export type Database = {
           utm_medium?: string | null
           utm_source?: string | null
           visitor_id?: string
+        }
+        Relationships: []
+      }
+      work_queue: {
+        Row: {
+          agent_type: string
+          completed_at: string | null
+          created_at: string
+          deny_reason: string | null
+          description: string | null
+          id: string
+          metadata: Json | null
+          priority: string
+          source: string | null
+          status: string
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          agent_type: string
+          completed_at?: string | null
+          created_at?: string
+          deny_reason?: string | null
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          priority?: string
+          source?: string | null
+          status?: string
+          title: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_type?: string
+          completed_at?: string | null
+          created_at?: string
+          deny_reason?: string | null
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          priority?: string
+          source?: string | null
+          status?: string
+          title?: string
+          type?: string
+          updated_at?: string
         }
         Relationships: []
       }
