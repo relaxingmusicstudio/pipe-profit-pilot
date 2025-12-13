@@ -1176,6 +1176,50 @@ export type Database = {
           },
         ]
       }
+      consent_audit_log: {
+        Row: {
+          action: string
+          channel: string | null
+          consent_text: string | null
+          created_at: string | null
+          id: string
+          ip_address: string | null
+          lead_id: string | null
+          source: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          action: string
+          channel?: string | null
+          consent_text?: string | null
+          created_at?: string | null
+          id?: string
+          ip_address?: string | null
+          lead_id?: string | null
+          source?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          action?: string
+          channel?: string | null
+          consent_text?: string | null
+          created_at?: string | null
+          id?: string
+          ip_address?: string | null
+          lead_id?: string | null
+          source?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consent_audit_log_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts_unified: {
         Row: {
           created_at: string | null
@@ -1629,6 +1673,8 @@ export type Database = {
         Row: {
           attempts: number | null
           campaign_id: string | null
+          consent_source: string | null
+          consent_verified: boolean | null
           contact_id: string | null
           created_at: string
           id: string
@@ -1638,6 +1684,7 @@ export type Database = {
           notes: string | null
           phone_number: string
           priority: number | null
+          requires_human: boolean | null
           scheduled_at: string | null
           status: string | null
           updated_at: string
@@ -1645,6 +1692,8 @@ export type Database = {
         Insert: {
           attempts?: number | null
           campaign_id?: string | null
+          consent_source?: string | null
+          consent_verified?: boolean | null
           contact_id?: string | null
           created_at?: string
           id?: string
@@ -1654,6 +1703,7 @@ export type Database = {
           notes?: string | null
           phone_number: string
           priority?: number | null
+          requires_human?: boolean | null
           scheduled_at?: string | null
           status?: string | null
           updated_at?: string
@@ -1661,6 +1711,8 @@ export type Database = {
         Update: {
           attempts?: number | null
           campaign_id?: string | null
+          consent_source?: string | null
+          consent_verified?: boolean | null
           contact_id?: string | null
           created_at?: string
           id?: string
@@ -1670,6 +1722,7 @@ export type Database = {
           notes?: string | null
           phone_number?: string
           priority?: number | null
+          requires_human?: boolean | null
           scheduled_at?: string | null
           status?: string | null
           updated_at?: string
@@ -1967,84 +2020,251 @@ export type Database = {
         }
         Relationships: []
       }
+      lead_activities: {
+        Row: {
+          activity_type: string
+          created_at: string | null
+          description: string | null
+          duration_seconds: number | null
+          id: string
+          lead_id: string | null
+          metadata: Json | null
+          outcome: string | null
+          performed_by: string | null
+        }
+        Insert: {
+          activity_type: string
+          created_at?: string | null
+          description?: string | null
+          duration_seconds?: number | null
+          id?: string
+          lead_id?: string | null
+          metadata?: Json | null
+          outcome?: string | null
+          performed_by?: string | null
+        }
+        Update: {
+          activity_type?: string
+          created_at?: string | null
+          description?: string | null
+          duration_seconds?: number | null
+          id?: string
+          lead_id?: string | null
+          metadata?: Json | null
+          outcome?: string | null
+          performed_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
+          annual_revenue: string | null
+          assigned_to: string | null
+          best_time_to_call: string | null
+          budget_range: string | null
           business_name: string | null
           buying_signals: string[] | null
           call_volume: string | null
+          company_website: string | null
+          competitor_mentioned: string | null
+          consent_date: string | null
+          consent_source: string | null
+          consent_to_call: boolean | null
+          consent_to_email: boolean | null
+          consent_to_sms: boolean | null
           conversation_id: string | null
           conversion_probability: number | null
           converted_at: string | null
           created_at: string | null
+          custom_fields: Json | null
+          decision_maker: boolean | null
+          decision_maker_name: string | null
+          decision_timeline: string | null
+          dnc_date: string | null
+          dnc_reason: string | null
+          do_not_call: boolean | null
           email: string | null
+          follow_up_notes: string | null
+          form_name: string | null
+          form_submitted_at: string | null
           ghl_contact_id: string | null
           id: string
           interests: string[] | null
+          ip_address: string | null
+          landing_page: string | null
+          last_call_date: string | null
+          last_call_notes: string | null
+          last_call_outcome: string | null
           lead_score: number | null
           lead_temperature: string | null
           name: string | null
+          next_action: string | null
+          next_action_date: string | null
           notes: string | null
+          number_of_employees: number | null
           objections: string[] | null
+          pain_points: string[] | null
           phone: string | null
+          preferred_contact_method: string | null
           revenue_value: number | null
+          service_type: string | null
+          source: string | null
+          source_detail: string | null
           status: string | null
+          tcpa_consent_text: string | null
           team_size: string | null
           timeline: string | null
+          timezone: string | null
+          total_call_attempts: number | null
           trade: string | null
           updated_at: string | null
+          utm_campaign: string | null
+          utm_medium: string | null
+          utm_source: string | null
           visitor_id: string | null
+          years_in_business: number | null
         }
         Insert: {
+          annual_revenue?: string | null
+          assigned_to?: string | null
+          best_time_to_call?: string | null
+          budget_range?: string | null
           business_name?: string | null
           buying_signals?: string[] | null
           call_volume?: string | null
+          company_website?: string | null
+          competitor_mentioned?: string | null
+          consent_date?: string | null
+          consent_source?: string | null
+          consent_to_call?: boolean | null
+          consent_to_email?: boolean | null
+          consent_to_sms?: boolean | null
           conversation_id?: string | null
           conversion_probability?: number | null
           converted_at?: string | null
           created_at?: string | null
+          custom_fields?: Json | null
+          decision_maker?: boolean | null
+          decision_maker_name?: string | null
+          decision_timeline?: string | null
+          dnc_date?: string | null
+          dnc_reason?: string | null
+          do_not_call?: boolean | null
           email?: string | null
+          follow_up_notes?: string | null
+          form_name?: string | null
+          form_submitted_at?: string | null
           ghl_contact_id?: string | null
           id?: string
           interests?: string[] | null
+          ip_address?: string | null
+          landing_page?: string | null
+          last_call_date?: string | null
+          last_call_notes?: string | null
+          last_call_outcome?: string | null
           lead_score?: number | null
           lead_temperature?: string | null
           name?: string | null
+          next_action?: string | null
+          next_action_date?: string | null
           notes?: string | null
+          number_of_employees?: number | null
           objections?: string[] | null
+          pain_points?: string[] | null
           phone?: string | null
+          preferred_contact_method?: string | null
           revenue_value?: number | null
+          service_type?: string | null
+          source?: string | null
+          source_detail?: string | null
           status?: string | null
+          tcpa_consent_text?: string | null
           team_size?: string | null
           timeline?: string | null
+          timezone?: string | null
+          total_call_attempts?: number | null
           trade?: string | null
           updated_at?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
           visitor_id?: string | null
+          years_in_business?: number | null
         }
         Update: {
+          annual_revenue?: string | null
+          assigned_to?: string | null
+          best_time_to_call?: string | null
+          budget_range?: string | null
           business_name?: string | null
           buying_signals?: string[] | null
           call_volume?: string | null
+          company_website?: string | null
+          competitor_mentioned?: string | null
+          consent_date?: string | null
+          consent_source?: string | null
+          consent_to_call?: boolean | null
+          consent_to_email?: boolean | null
+          consent_to_sms?: boolean | null
           conversation_id?: string | null
           conversion_probability?: number | null
           converted_at?: string | null
           created_at?: string | null
+          custom_fields?: Json | null
+          decision_maker?: boolean | null
+          decision_maker_name?: string | null
+          decision_timeline?: string | null
+          dnc_date?: string | null
+          dnc_reason?: string | null
+          do_not_call?: boolean | null
           email?: string | null
+          follow_up_notes?: string | null
+          form_name?: string | null
+          form_submitted_at?: string | null
           ghl_contact_id?: string | null
           id?: string
           interests?: string[] | null
+          ip_address?: string | null
+          landing_page?: string | null
+          last_call_date?: string | null
+          last_call_notes?: string | null
+          last_call_outcome?: string | null
           lead_score?: number | null
           lead_temperature?: string | null
           name?: string | null
+          next_action?: string | null
+          next_action_date?: string | null
           notes?: string | null
+          number_of_employees?: number | null
           objections?: string[] | null
+          pain_points?: string[] | null
           phone?: string | null
+          preferred_contact_method?: string | null
           revenue_value?: number | null
+          service_type?: string | null
+          source?: string | null
+          source_detail?: string | null
           status?: string | null
+          tcpa_consent_text?: string | null
           team_size?: string | null
           timeline?: string | null
+          timezone?: string | null
+          total_call_attempts?: number | null
           trade?: string | null
           updated_at?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
           visitor_id?: string | null
+          years_in_business?: number | null
         }
         Relationships: [
           {

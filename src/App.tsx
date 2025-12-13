@@ -31,6 +31,10 @@ import AdminAgentFunnels from "./pages/AdminAgentFunnels";
 import AdminAgentYouTube from "./pages/AdminAgentYouTube";
 import AdminAutomation from "./pages/AdminAutomation";
 import AdminOnboarding from "./pages/AdminOnboarding";
+import AdminCRM from "./pages/AdminCRM";
+import AdminDialer from "./pages/AdminDialer";
+import AdminOutreach from "./pages/AdminOutreach";
+import AdminSMSBlast from "./pages/AdminSMSBlast";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -55,6 +59,10 @@ const App = () => (
               <Route path="/admin/clients" element={<ProtectedRoute requireAdmin><AdminClients /></ProtectedRoute>} />
               <Route path="/admin/leads" element={<ProtectedRoute requireAdmin><AdminLeads /></ProtectedRoute>} />
               <Route path="/admin/onboarding" element={<ProtectedRoute requireAdmin><AdminOnboarding /></ProtectedRoute>} />
+              <Route path="/admin/crm" element={<ProtectedRoute requireAdmin><AdminCRM /></ProtectedRoute>} />
+              <Route path="/admin/dialer" element={<ProtectedRoute requireAdmin><AdminDialer /></ProtectedRoute>} />
+              <Route path="/admin/outreach" element={<ProtectedRoute requireAdmin><AdminOutreach /></ProtectedRoute>} />
+              <Route path="/admin/sms-blast" element={<ProtectedRoute requireAdmin><AdminSMSBlast /></ProtectedRoute>} />
               <Route path="/admin/sequences" element={<ProtectedRoute requireAdmin><AdminSequences /></ProtectedRoute>} />
               <Route path="/admin/settings" element={<ProtectedRoute requireAdmin><AdminSettings /></ProtectedRoute>} />
               <Route path="/admin/content" element={<ProtectedRoute requireAdmin><AdminContent /></ProtectedRoute>} />

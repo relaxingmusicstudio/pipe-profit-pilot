@@ -16,6 +16,9 @@ import {
   ChevronLeft,
   GitBranch,
   Youtube,
+  Phone,
+  Mail,
+  LayoutGrid,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -27,6 +30,10 @@ interface AdminLayoutProps {
 
 const navItems = [
   { path: "/admin/ceo", label: "CEO Console", icon: Brain },
+  { path: "/admin/crm", label: "CRM", icon: LayoutGrid },
+  { path: "/admin/dialer", label: "Dialer", icon: Phone },
+  { path: "/admin/outreach", label: "Outreach", icon: Mail },
+  { path: "/admin/sms-blast", label: "SMS Blast", icon: MessageSquare },
   { path: "/admin/agent/funnels", label: "Funnels", icon: GitBranch },
   { path: "/admin/agent/analytics", label: "Analytics", icon: BarChart3 },
   { path: "/admin/agent/inbox", label: "Inbox", icon: MessageSquare },
