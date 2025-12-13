@@ -17,7 +17,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { action, queue_item_id, phone_number, contact_id, lead_id, disposition, notes } = await req.json();
+    const { action, queue_item_id, phone_number, contact_id, lead_id, disposition, notes, call_type = 'human' } = await req.json();
 
     // Check if Twilio is configured
     const twilioAccountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
@@ -27,6 +27,83 @@ serve(async (req) => {
     const twilioConfigured = twilioAccountSid && twilioAuthToken && twilioPhoneNumber;
 
     if (action === 'initiate_call') {
+      // TCPA COMPLIANCE: Verify consent before any call
+      let hasConsent = false;
+      let consentSource = null;
+      let isDNC = false;
+      
+      // Check lead consent if lead_id provided
+      if (lead_id) {
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('consent_to_call, consent_source, do_not_call, form_submitted_at')
+          .eq('id', lead_id)
+          .single();
+        
+        if (lead) {
+          hasConsent = lead.consent_to_call === true || !!lead.form_submitted_at;
+          consentSource = lead.consent_source || (lead.form_submitted_at ? 'form_submission' : null);
+          isDNC = lead.do_not_call === true;
+        }
+      }
+      
+      // Check dialer queue consent if queue_item_id provided
+      if (queue_item_id) {
+        const { data: queueItem } = await supabase
+          .from('dialer_queue')
+          .select('consent_verified, consent_source, requires_human, lead:leads(consent_to_call, consent_source, do_not_call, form_submitted_at)')
+          .eq('id', queue_item_id)
+          .single();
+        
+        if (queueItem) {
+          // Check if queue item has verified consent or linked lead has consent
+          const linkedLead = queueItem.lead as any;
+          hasConsent = queueItem.consent_verified === true || 
+                       linkedLead?.consent_to_call === true || 
+                       !!linkedLead?.form_submitted_at;
+          consentSource = queueItem.consent_source || linkedLead?.consent_source;
+          isDNC = linkedLead?.do_not_call === true;
+        }
+      }
+      
+      // BLOCK: Do Not Call check
+      if (isDNC) {
+        console.log('[BLOCKED] DNC - Cannot call:', phone_number);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Cannot call - contact is on Do Not Call list',
+          reason: 'dnc',
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      // BLOCK: AI calls require prior written consent (TCPA)
+      if (call_type === 'ai' && !hasConsent) {
+        console.log('[BLOCKED] AI call without consent:', phone_number);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'AI calling requires prior written consent (TCPA compliance). Lead must submit a form first.',
+          reason: 'no_ai_consent',
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      // WARNING: Human calls without consent (allowed but logged)
+      if (!hasConsent && call_type === 'human') {
+        console.log('[WARNING] Human call without verified consent:', phone_number);
+        // Log consent audit
+        await supabase.from('consent_audit_log').insert({
+          lead_id,
+          action: 'call_without_consent',
+          channel: 'phone',
+          source: 'manual_dial',
+        });
+      }
+
       // Create call log entry
       const { data: callLog, error: logError } = await supabase
         .from('call_logs')
@@ -38,11 +115,28 @@ serve(async (req) => {
           to_number: phone_number,
           status: twilioConfigured ? 'initiated' : 'mock_initiated',
           started_at: new Date().toISOString(),
+          ai_handled: call_type === 'ai',
         })
         .select()
         .single();
 
       if (logError) throw logError;
+      
+      // Log activity
+      if (lead_id) {
+        await supabase.from('lead_activities').insert({
+          lead_id,
+          activity_type: 'call',
+          description: `Outbound ${call_type} call initiated to ${phone_number}`,
+          metadata: { call_log_id: callLog.id, call_type, consent_verified: hasConsent },
+        });
+        
+        // Update lead call stats
+        await supabase.from('leads').update({
+          last_call_date: new Date().toISOString(),
+          total_call_attempts: supabase.rpc('increment_call_attempts', { row_id: lead_id }),
+        }).eq('id', lead_id);
+      }
 
       // Update dialer queue if item provided
       if (queue_item_id) {
@@ -50,7 +144,6 @@ serve(async (req) => {
           .from('dialer_queue')
           .update({
             status: 'calling',
-            attempts: supabase.rpc('increment_attempts', { row_id: queue_item_id }),
             last_attempt_at: new Date().toISOString(),
           })
           .eq('id', queue_item_id);
@@ -75,6 +168,8 @@ serve(async (req) => {
           message: 'Twilio not configured - call simulated',
           call_log_id: callLog.id,
           phone_number,
+          consent_verified: hasConsent,
+          consent_source: consentSource,
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -139,6 +234,23 @@ serve(async (req) => {
         .eq('id', queue_item_id);
 
       if (error) throw error;
+      
+      // Log activity if lead_id provided
+      if (lead_id) {
+        await supabase.from('lead_activities').insert({
+          lead_id,
+          activity_type: 'call',
+          description: `Call completed - ${disposition}`,
+          outcome: disposition,
+          metadata: { notes, call_log_id: queue_item_id },
+        });
+        
+        // Update lead with call outcome
+        await supabase.from('leads').update({
+          last_call_outcome: disposition,
+          last_call_notes: notes,
+        }).eq('id', lead_id);
+      }
 
       // Update dialer queue status
       if (queue_item_id) {
@@ -182,6 +294,32 @@ serve(async (req) => {
       });
 
     } else if (action === 'add_to_queue') {
+      // Check consent before adding to queue
+      let hasConsent = false;
+      let consentSource = null;
+      
+      if (lead_id) {
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('consent_to_call, consent_source, do_not_call, form_submitted_at')
+          .eq('id', lead_id)
+          .single();
+        
+        if (lead) {
+          if (lead.do_not_call) {
+            return new Response(JSON.stringify({
+              success: false,
+              error: 'Cannot add to queue - contact is on Do Not Call list',
+            }), {
+              status: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          hasConsent = lead.consent_to_call === true || !!lead.form_submitted_at;
+          consentSource = lead.consent_source || (lead.form_submitted_at ? 'form_submission' : null);
+        }
+      }
+      
       // Add contact/lead to dialer queue
       const { data, error } = await supabase
         .from('dialer_queue')
@@ -189,14 +327,21 @@ serve(async (req) => {
           contact_id,
           lead_id,
           phone_number,
-          priority: 50,
+          priority: hasConsent ? 75 : 50, // Consented leads get higher priority
+          consent_verified: hasConsent,
+          consent_source: consentSource,
+          requires_human: !hasConsent, // Non-consented leads require human
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      return new Response(JSON.stringify({ success: true, queue_item: data }), {
+      return new Response(JSON.stringify({ 
+        success: true, 
+        queue_item: data,
+        consent_verified: hasConsent,
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
