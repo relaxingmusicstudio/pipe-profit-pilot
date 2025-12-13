@@ -367,125 +367,185 @@ ${notes || "None"}
     };
     
     // ============================================
-    // SIMULATED AI SCORING FUNCTION
+    // REAL AI-POWERED LEAD SCORING
     // ============================================
-    const generateSimulatedAIScoring = () => {
-      // Calculate base score from form data
-      let baseScore = 40; // Start with baseline
+    const analyzeLeadWithAI = async () => {
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
       
-      // Timeline scoring
-      const timelineScores: Record<string, number> = {
-        "ASAP - Losing calls now": 25,
-        "Within 30 days": 18,
-        "1-3 months": 10,
-        "Just exploring": 5,
+      // Fallback scoring if AI unavailable
+      const fallbackScoring = () => {
+        let baseScore = 40;
+        const timelineScores: Record<string, number> = {
+          "ASAP - Losing calls now": 25, "Within 30 days": 18, "1-3 months": 10, "Just exploring": 5,
+        };
+        const teamScores: Record<string, number> = {
+          "Solo": 5, "2-5": 10, "6-10": 15, "10+ trucks": 20,
+        };
+        const volumeScores: Record<string, number> = {
+          "Under 50 calls": 5, "50-100 calls": 10, "100-200 calls": 15, "200+ calls": 20,
+        };
+        baseScore += (timelineScores[aiTimeline] || 8) + (teamScores[teamSize] || 8) + (volumeScores[callVolume] || 8);
+        const engagementNum = parseInt(engagementScore) || 0;
+        if (engagementNum >= 60) baseScore += 10;
+        else if (engagementNum >= 40) baseScore += 5;
+        const finalScore = Math.min(baseScore, 100);
+        
+        let temperature = finalScore >= 75 || aiTimeline === "ASAP - Losing calls now" ? "hot" : finalScore >= 55 ? "warm" : "cold";
+        let urgency = aiTimeline === "ASAP - Losing calls now" ? "immediate" : aiTimeline === "Within 30 days" ? "high" : aiTimeline === "1-3 months" ? "medium" : "low";
+        
+        const budgetScore = teamSize === "10+ trucks" ? 90 : teamSize === "6-10" ? 75 : teamSize === "2-5" ? 55 : 40;
+        const needScore = currentSolution === "Miss most calls" ? 90 : currentSolution === "Voicemail" ? 75 : 50;
+        const timelineScore = aiTimeline === "ASAP - Losing calls now" ? 95 : aiTimeline === "Within 30 days" ? 75 : aiTimeline === "1-3 months" ? 50 : 25;
+        
+        let estimatedMissedCalls = 0;
+        if (callVolume === "200+ calls") estimatedMissedCalls = currentSolution === "Miss most calls" ? 60 : 30;
+        else if (callVolume === "100-200 calls") estimatedMissedCalls = currentSolution === "Miss most calls" ? 40 : 20;
+        else if (callVolume === "50-100 calls") estimatedMissedCalls = currentSolution === "Miss most calls" ? 20 : 10;
+        else estimatedMissedCalls = currentSolution === "Miss most calls" ? 14 : 7;
+        
+        return {
+          score: finalScore, temperature, intent: "evaluating - form submission", conversionProb: `${Math.min(Math.round(finalScore * 0.85), 95)}%`,
+          urgency, buyingSignals: "Fallback scoring - AI unavailable", objections: "n/a",
+          followup: temperature === "hot" ? "Call immediately" : "Schedule demo within 48 hours",
+          summary: `Contact form from ${businessType || "service"} business. Team: ${teamSize || "n/a"}, Volume: ${callVolume || "n/a"}.`,
+          keyInsights: `${businessType || "Service"} business | ${teamSize || "Unknown"} team | ${callVolume || "Unknown"} calls | Timeline: ${aiTimeline || "Unknown"}`,
+          budgetScore, authorityScore: "n/a", needScore, timelineScore, estimatedMissedCalls,
+        };
       };
-      baseScore += timelineScores[aiTimeline] || 8;
       
-      // Team size scoring
-      const teamScores: Record<string, number> = {
-        "Solo": 5,
-        "2-5": 10,
-        "6-10": 15,
-        "10+ trucks": 20,
-      };
-      baseScore += teamScores[teamSize] || 8;
+      if (!LOVABLE_API_KEY) {
+        console.log("LOVABLE_API_KEY not configured, using fallback scoring");
+        return fallbackScoring();
+      }
       
-      // Call volume scoring
-      const volumeScores: Record<string, number> = {
-        "Under 50 calls": 5,
-        "50-100 calls": 10,
-        "100-200 calls": 15,
-        "200+ calls": 20,
-      };
-      baseScore += volumeScores[callVolume] || 8;
-      
-      // Engagement bonus
-      const engagementNum = parseInt(engagementScore) || 0;
-      if (engagementNum >= 60) baseScore += 10;
-      else if (engagementNum >= 40) baseScore += 5;
-      
-      // Cap at 100
-      const finalScore = Math.min(baseScore, 100);
-      
-      // Determine temperature
-      let temperature = "cold";
-      if (aiTimeline === "ASAP - Losing calls now" || finalScore >= 75) temperature = "hot";
-      else if (aiTimeline === "Within 30 days" || finalScore >= 55) temperature = "warm";
-      
-      // Determine urgency
-      let urgency = "low";
-      if (aiTimeline === "ASAP - Losing calls now") urgency = "immediate";
-      else if (aiTimeline === "Within 30 days") urgency = "high";
-      else if (aiTimeline === "1-3 months") urgency = "medium";
-      
-      // Determine intent
-      let intent = "researching";
-      if (aiTimeline === "ASAP - Losing calls now" || behavioralIntent?.includes("High Intent")) intent = "ready_to_buy";
-      else if (aiTimeline === "Within 30 days" || aiTimeline === "1-3 months") intent = "evaluating";
-      
-      // Calculate conversion probability
-      const conversionProb = Math.min(Math.round(finalScore * 0.85), 95);
-      
-      // Generate buying signals from form data
-      const signals: string[] = [];
-      if (teamSize === "10+ trucks" || teamSize === "6-10") signals.push(`Large team (${teamSize})`);
-      if (callVolume === "200+ calls" || callVolume === "100-200 calls") signals.push(`High call volume (${callVolume})`);
-      if (aiTimeline === "ASAP - Losing calls now") signals.push("ASAP timeline - urgent need");
-      else if (aiTimeline === "Within 30 days") signals.push("30-day timeline - active buyer");
-      if (engagementNum >= 50) signals.push(`High engagement score (${engagementNum})`);
-      if (isReturningVisitor === "YES") signals.push("Returning visitor");
-      if (behavioralIntent?.includes("High Intent")) signals.push("High intent behavior");
-      
-      // Generate key insights
-      const insights: string[] = [];
-      insights.push(`${businessType || "Service"} business with ${teamSize || "unknown"} team`);
-      if (currentSolution) insights.push(`Currently: ${currentSolution}`);
-      if (callVolume) insights.push(`Call volume: ${callVolume}`);
-      if (otherServicesNeeded) insights.push(`Interested in: ${otherServicesNeeded}`);
-      if (aiTimeline) insights.push(`Timeline: ${aiTimeline}`);
-      
-      // Calculate BANT scores
-      const budgetScore = teamSize === "10+ trucks" ? 90 : teamSize === "6-10" ? 75 : teamSize === "2-5" ? 55 : 40;
-      const needScore = currentSolution === "Miss most calls" ? 90 : currentSolution === "Voicemail" ? 75 : 50;
-      const timelineScore = aiTimeline === "ASAP - Losing calls now" ? 95 : aiTimeline === "Within 30 days" ? 75 : aiTimeline === "1-3 months" ? 50 : 25;
-      
-      // Calculate estimated missed calls based on volume and handling
-      let estimatedMissedCalls = 0;
-      if (callVolume === "200+ calls") estimatedMissedCalls = currentSolution === "Miss most calls" ? 60 : 30;
-      else if (callVolume === "100-200 calls") estimatedMissedCalls = currentSolution === "Miss most calls" ? 40 : 20;
-      else if (callVolume === "50-100 calls") estimatedMissedCalls = currentSolution === "Miss most calls" ? 20 : 10;
-      else estimatedMissedCalls = currentSolution === "Miss most calls" ? 14 : 7;
-      
-      // Recommended followup
-      let followup = "Standard follow-up in 3-5 days";
-      if (temperature === "hot") followup = "Call immediately - high intent lead";
-      else if (temperature === "warm") followup = "Schedule demo within 48 hours";
-      
-      // Conversation summary
-      const summary = `Contact form submission from ${businessType || "service"} business. Team size: ${teamSize || "n/a"}, Call volume: ${callVolume || "n/a"}. Timeline: ${aiTimeline || "n/a"}.`;
-      
-      return {
-        score: finalScore,
-        temperature,
-        intent: `${intent} - form submission`,
-        conversionProb: `${conversionProb}%`,
-        urgency,
-        buyingSignals: signals.length > 0 ? signals.join(", ") : "n/a",
-        objections: "n/a",
-        followup,
-        summary,
-        keyInsights: insights.length > 0 ? insights.join(" | ") : "n/a",
-        budgetScore,
-        authorityScore: "n/a",
-        needScore,
-        timelineScore,
-        estimatedMissedCalls,
-      };
+      try {
+        console.log("=== CALLING AI FOR LEAD ANALYSIS ===");
+        
+        const leadContext = `
+LEAD DATA:
+- Business Type: ${businessType || "Not specified"}
+- Team Size: ${teamSize || "Not specified"}
+- Call Volume: ${callVolume || "Not specified"}
+- Current Call Handling: ${currentSolution || "Not specified"}
+- Average Job Value: ${avgJobValue || "Not specified"}
+- Timeline: ${aiTimeline || "Not specified"}
+- Additional Services Interested: ${otherServicesNeeded || "None"}
+- Website: ${website || "Not provided"}
+- Message: ${message || "None"}
+
+BEHAVIORAL DATA:
+- Engagement Score: ${engagementScore || "0"}
+- Behavioral Intent: ${behavioralIntent || "Unknown"}
+- Returning Visitor: ${isReturningVisitor || "NO"}
+- Sections Viewed: ${sectionsViewed || "None"}
+- Time on Site: ${timeOnSite || "Unknown"}
+`;
+        
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: [
+              {
+                role: "system",
+                content: `You are an expert B2B sales lead qualification AI for an AI voice agent company targeting HVAC, plumbing, electrical, and home service contractors.
+
+Analyze leads and return a JSON object with EXACTLY these fields:
+{
+  "score": <number 1-100>,
+  "temperature": "<hot|warm|cold>",
+  "intent": "<string describing buyer intent>",
+  "conversionProb": "<percentage string like '75%'>",
+  "urgency": "<immediate|high|medium|low>",
+  "buyingSignals": "<comma-separated list of positive signals>",
+  "objections": "<potential objections or 'n/a'>",
+  "followup": "<recommended next action>",
+  "summary": "<2-3 sentence lead summary>",
+  "keyInsights": "<key insights separated by |>",
+  "budgetScore": <number 1-100>,
+  "needScore": <number 1-100>,
+  "timelineScore": <number 1-100>,
+  "estimatedMissedCalls": <number>
+}
+
+SCORING GUIDELINES:
+- ASAP timeline + high call volume + large team = HOT lead (80-100)
+- Within 30 days + 50+ calls = WARM lead (60-79)  
+- Just exploring OR low volume = COLD lead (40-59)
+- Solo operators rarely convert unless ASAP timeline
+
+ALWAYS respond with valid JSON only. No markdown, no explanations.`
+              },
+              {
+                role: "user",
+                content: `Analyze this lead and provide qualification scoring:\n${leadContext}`
+              }
+            ],
+            max_tokens: 1000,
+            temperature: 0.3,
+          }),
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("AI Gateway error:", response.status, errorText);
+          return fallbackScoring();
+        }
+        
+        const data = await response.json();
+        const aiContent = data.choices?.[0]?.message?.content;
+        
+        if (!aiContent) {
+          console.error("No AI response content");
+          return fallbackScoring();
+        }
+        
+        console.log("AI Response:", aiContent);
+        
+        // Parse JSON from AI response
+        let aiResult;
+        try {
+          // Clean potential markdown formatting
+          const cleanedContent = aiContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+          aiResult = JSON.parse(cleanedContent);
+        } catch (parseError) {
+          console.error("Failed to parse AI response:", parseError);
+          return fallbackScoring();
+        }
+        
+        // Validate and normalize the response
+        return {
+          score: Math.min(100, Math.max(1, Number(aiResult.score) || 50)),
+          temperature: ["hot", "warm", "cold"].includes(aiResult.temperature) ? aiResult.temperature : "warm",
+          intent: aiResult.intent || "evaluating - form submission",
+          conversionProb: aiResult.conversionProb || "50%",
+          urgency: ["immediate", "high", "medium", "low"].includes(aiResult.urgency) ? aiResult.urgency : "medium",
+          buyingSignals: aiResult.buyingSignals || "n/a",
+          objections: aiResult.objections || "n/a",
+          followup: aiResult.followup || "Schedule demo call",
+          summary: aiResult.summary || `Lead from ${businessType || "service"} business`,
+          keyInsights: aiResult.keyInsights || "n/a",
+          budgetScore: Math.min(100, Math.max(1, Number(aiResult.budgetScore) || 50)),
+          authorityScore: "n/a",
+          needScore: Math.min(100, Math.max(1, Number(aiResult.needScore) || 50)),
+          timelineScore: Math.min(100, Math.max(1, Number(aiResult.timelineScore) || 50)),
+          estimatedMissedCalls: Number(aiResult.estimatedMissedCalls) || 14,
+        };
+        
+      } catch (error) {
+        console.error("AI analysis error:", error);
+        return fallbackScoring();
+      }
     };
     
-    // Generate AI scoring data
-    const simulatedAI = generateSimulatedAIScoring();
+    // Generate AI scoring data (async)
+    console.log("Starting AI lead analysis...");
+    const aiAnalysis = await analyzeLeadWithAI();
+    console.log("AI Analysis complete:", JSON.stringify(aiAnalysis, null, 2));
     
     // Helper function: return value or "n/a" if empty
     const valueOrNA = (val: string | undefined | null): string => {
@@ -511,8 +571,8 @@ ${notes || "None"}
       return num || 351;
     };
     const avgJobNumeric = parseAvgJobValue(avgJobValue || "");
-    // Use simulated missed calls if not provided
-    const missedCallsNumeric = missedCalls ? parseInt(missedCalls.replace(/[^0-9]/g, '')) || 0 : simulatedAI.estimatedMissedCalls;
+    // Use AI-calculated missed calls if not provided
+    const missedCallsNumeric = missedCalls ? parseInt(missedCalls.replace(/[^0-9]/g, '')) || 0 : aiAnalysis.estimatedMissedCalls;
     const missedCallRevenue = avgJobNumeric * missedCallsNumeric;
     
     // Parse potential loss as numeric - use calculated value if not provided
@@ -565,16 +625,16 @@ ${notes || "None"}
       additionalServices: valueOrNA(otherServicesNeeded),
       ai_timeline: valueOrNA(aiTimeline),
       aiTimeline: valueOrNA(aiTimeline),
-      lead_temperature: simulatedAI.temperature.toUpperCase(),
-      leadTemperature: simulatedAI.temperature.toUpperCase(),
+      lead_temperature: aiAnalysis.temperature.toUpperCase(),
+      leadTemperature: aiAnalysis.temperature.toUpperCase(),
       lead_qualification: isGoodFit === true ? "YES" : "NO",
       leadQualification: isGoodFit === true ? "YES" : "NO",
       fit_reason: valueOrNA(fitReason),
       fitReason: valueOrNA(fitReason),
-      lead_intent: simulatedAI.intent,
-      leadIntent: simulatedAI.intent,
-      lead_score: simulatedAI.score.toString(),
-      leadScore: simulatedAI.score.toString(),
+      lead_intent: aiAnalysis.intent,
+      leadIntent: aiAnalysis.intent,
+      lead_score: aiAnalysis.score.toString(),
+      leadScore: aiAnalysis.score.toString(),
       missed_call_revenue: `$${missedCallRevenue.toLocaleString()}`,
       missedCallRevenue: `$${missedCallRevenue.toLocaleString()}`,
       potential_revenue_loss: `$${potentialLossNumeric.toLocaleString()}`,
@@ -610,21 +670,21 @@ ${notes || "None"}
       stripeSessionId: valueOrNA(stripeSessionId),
       payment_date: valueOrNA(paymentDate),
       paymentDate: valueOrNA(paymentDate),
-      // AI Analysis fields - USE SIMULATED DATA
-      ai_lead_score: simulatedAI.score.toString(),
-      ai_lead_temperature: simulatedAI.temperature,
-      ai_lead_intent: simulatedAI.intent,
-      ai_conversion_probability: simulatedAI.conversionProb,
-      ai_urgency_level: simulatedAI.urgency,
-      ai_buying_signals: simulatedAI.buyingSignals,
-      ai_objections_raised: simulatedAI.objections,
-      ai_recommended_followup: simulatedAI.followup,
-      ai_conversation_summary: simulatedAI.summary,
-      ai_key_insights: simulatedAI.keyInsights,
-      ai_bant_budget: simulatedAI.budgetScore.toString(),
-      ai_bant_authority: simulatedAI.authorityScore,
-      ai_bant_need: simulatedAI.needScore.toString(),
-      ai_bant_timeline: simulatedAI.timelineScore.toString(),
+      // AI Analysis fields - REAL AI-POWERED DATA
+      ai_lead_score: aiAnalysis.score.toString(),
+      ai_lead_temperature: aiAnalysis.temperature,
+      ai_lead_intent: aiAnalysis.intent,
+      ai_conversion_probability: aiAnalysis.conversionProb,
+      ai_urgency_level: aiAnalysis.urgency,
+      ai_buying_signals: aiAnalysis.buyingSignals,
+      ai_objections_raised: aiAnalysis.objections,
+      ai_recommended_followup: aiAnalysis.followup,
+      ai_conversation_summary: aiAnalysis.summary,
+      ai_key_insights: aiAnalysis.keyInsights,
+      ai_bant_budget: aiAnalysis.budgetScore.toString(),
+      ai_bant_authority: aiAnalysis.authorityScore,
+      ai_bant_need: aiAnalysis.needScore.toString(),
+      ai_bant_timeline: aiAnalysis.timelineScore.toString(),
       // Visitor Intelligence fields
       visitor_id: valueOrNA(visitorId),
       visitorId: valueOrNA(visitorId),
