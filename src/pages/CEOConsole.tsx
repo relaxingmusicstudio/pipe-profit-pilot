@@ -13,13 +13,15 @@ import {
   Zap,
   ArrowUpRight,
   ArrowDownRight,
-  Activity
+  Activity,
+  Mic
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import CEOChatPanel from "@/components/CEOChatPanel";
 import ChannelPerformanceTable from "@/components/ChannelPerformanceTable";
 import ABTestsWidget from "@/components/ABTestsWidget";
 import AdminLayout from "@/components/AdminLayout";
+import CEOVoiceAssistant from "@/components/CEOVoiceAssistant";
 
 interface Metrics {
   totalRevenue: number;
@@ -78,6 +80,7 @@ const CEOConsole = () => {
   const [channelData, setChannelData] = useState<ChannelData[]>([]);
   const [abTests, setABTests] = useState<ABTest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const navigate = useNavigate();
 
   const fetchData = async () => {
@@ -233,29 +236,45 @@ const CEOConsole = () => {
   );
 
   return (
-    <AdminLayout 
-      title="CEO Dashboard" 
-      subtitle="Executive overview • Real-time business intelligence"
-    >
-      {/* Top Actions Bar */}
-      <div className="flex items-center justify-end gap-2 mb-4">
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={fetchData}
-          disabled={loading}
+    <>
+      <CEOVoiceAssistant 
+        isOpen={isVoiceOpen} 
+        onClose={() => setIsVoiceOpen(false)} 
+      />
+      
+      <AdminLayout 
+        title="CEO Dashboard" 
+        subtitle="Executive overview • Real-time business intelligence"
+      >
+        {/* Floating Voice Button */}
+        <Button
+          onClick={() => setIsVoiceOpen(true)}
+          className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full shadow-lg bg-gradient-to-br from-primary to-accent hover:scale-105 transition-transform"
+          size="icon"
+          title="Hey CEO - Voice Assistant"
         >
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
+          <Mic className="h-6 w-6" />
         </Button>
-        <Button 
-          size="sm"
-          onClick={() => navigate("/admin/analytics")}
-        >
-          <BarChart3 className="h-4 w-4 mr-2" />
-          Deep Dive
-        </Button>
-      </div>
+
+        {/* Top Actions Bar */}
+        <div className="flex items-center justify-end gap-2 mb-4">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={fetchData}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button 
+            size="sm"
+            onClick={() => navigate("/admin/analytics")}
+          >
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Deep Dive
+          </Button>
+        </div>
 
       {/* Row 1: Key Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
@@ -404,7 +423,8 @@ const CEOConsole = () => {
           </Card>
         </div>
       </div>
-    </AdminLayout>
+      </AdminLayout>
+    </>
   );
 };
 
