@@ -14,9 +14,11 @@ import {
   Sparkles,
   TrendingUp,
   Target,
-  AlertCircle
+  AlertCircle,
+  Mic
 } from "lucide-react";
 import { toast } from "sonner";
+import CEOVoiceAssistant from "./CEOVoiceAssistant";
 
 interface Message {
   role: "user" | "assistant";
@@ -41,6 +43,7 @@ export const CEOChatPanel = ({ onInsightGenerated, className = "" }: CEOChatPane
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -137,15 +140,36 @@ export const CEOChatPanel = ({ onInsightGenerated, className = "" }: CEOChatPane
       .replace(/\n/g, '<br/>');
   };
 
+  const handleVoiceTranscript = (text: string, role: "user" | "assistant") => {
+    const newMessage: Message = { role, content: text, timestamp: new Date() };
+    setMessages(prev => [...prev, newMessage]);
+  };
+
   return (
-    <Card className={`flex flex-col ${className}`}>
-      <CardHeader className="pb-3 border-b">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Bot className="h-4 w-4 text-accent" />
-          CEO AI Assistant
-          <Badge variant="secondary" className="text-xs">Live</Badge>
-        </CardTitle>
-      </CardHeader>
+    <>
+      <CEOVoiceAssistant 
+        isOpen={isVoiceOpen} 
+        onClose={() => setIsVoiceOpen(false)}
+        onTranscript={handleVoiceTranscript}
+      />
+      
+      <Card className={`flex flex-col ${className}`}>
+        <CardHeader className="pb-3 border-b">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Bot className="h-4 w-4 text-accent" />
+            CEO AI Assistant
+            <Badge variant="secondary" className="text-xs">Live</Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="ml-auto h-7 w-7"
+              onClick={() => setIsVoiceOpen(true)}
+              title="Voice Assistant"
+            >
+              <Mic className="h-4 w-4 text-primary" />
+            </Button>
+          </CardTitle>
+        </CardHeader>
       
       <CardContent className="flex-1 flex flex-col p-0">
         {/* Quick Actions */}
@@ -247,8 +271,9 @@ export const CEOChatPanel = ({ onInsightGenerated, className = "" }: CEOChatPane
             </Button>
           </form>
         </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </>
   );
 };
 
