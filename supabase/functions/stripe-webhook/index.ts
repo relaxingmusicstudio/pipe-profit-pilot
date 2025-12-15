@@ -169,14 +169,50 @@ const handler = async (req: Request): Promise<Response> => {
       const subscription = event.data.object as Stripe.Subscription;
       console.log("Subscription updated:", subscription.id);
       
-      // Could trigger expansion/contraction tracking here
+      // Update client subscription status
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      await supabase
+        .from('clients')
+        .update({ 
+          subscription_status: subscription.status,
+          subscription_id: subscription.id,
+        })
+        .eq('stripe_customer_id', subscription.customer);
     }
 
     if (event.type === "customer.subscription.deleted") {
       const subscription = event.data.object as Stripe.Subscription;
       console.log("Subscription cancelled:", subscription.id);
       
-      // Could trigger churn intervention here
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      await supabase
+        .from('clients')
+        .update({ 
+          subscription_status: 'canceled',
+          churned_at: new Date().toISOString(),
+        })
+        .eq('stripe_customer_id', subscription.customer);
+    }
+
+    // Handle invoice payment failed
+    if (event.type === "invoice.payment_failed") {
+      const invoice = event.data.object as Stripe.Invoice;
+      console.log("Invoice payment failed:", invoice.id);
+      
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      await supabase
+        .from('client_invoices')
+        .update({ status: 'overdue' })
+        .eq('stripe_invoice_id', invoice.id);
+        
+      // Log for billing agent to handle
+      await supabase.from('billing_agent_actions').insert({
+        action_type: 'dunning',
+        target_type: 'invoice',
+        target_id: invoice.id,
+        reason: `Payment failed for invoice ${invoice.number}`,
+        ai_confidence: 0.9,
+      });
     }
 
     console.log("Event processed successfully");

@@ -48,6 +48,9 @@ serve(async (req) => {
     const data = await response.json();
     console.log('Vapi call created successfully:', data);
 
+    // Log usage for billing (will be updated with actual duration via webhook)
+    // Initial placeholder - actual duration tracking happens in twilio-webhook
+    
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
