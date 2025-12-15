@@ -239,3 +239,6 @@ verify_jwt = false
 
 [functions.user-input-logger]
 verify_jwt = false
+
+[functions.billing-agent]
+verify_jwt = false

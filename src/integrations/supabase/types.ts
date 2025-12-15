@@ -660,6 +660,68 @@ export type Database = {
         }
         Relationships: []
       }
+      billing_agent_actions: {
+        Row: {
+          action_type: string
+          ai_confidence: number | null
+          amount: number | null
+          approved_by: string | null
+          client_id: string | null
+          created_at: string
+          error_message: string | null
+          executed_at: string | null
+          human_approved: boolean | null
+          id: string
+          reason: string
+          requires_human_review: boolean | null
+          result: Json | null
+          target_id: string | null
+          target_type: string | null
+        }
+        Insert: {
+          action_type: string
+          ai_confidence?: number | null
+          amount?: number | null
+          approved_by?: string | null
+          client_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          executed_at?: string | null
+          human_approved?: boolean | null
+          id?: string
+          reason: string
+          requires_human_review?: boolean | null
+          result?: Json | null
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Update: {
+          action_type?: string
+          ai_confidence?: number | null
+          amount?: number | null
+          approved_by?: string | null
+          client_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          executed_at?: string | null
+          human_approved?: boolean | null
+          id?: string
+          reason?: string
+          requires_human_review?: boolean | null
+          result?: Json | null
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_agent_actions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_context: {
         Row: {
           auto_mode: string | null
@@ -1528,19 +1590,26 @@ export type Database = {
           business_name: string | null
           churned_at: string | null
           created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
           email: string
           health_score: number | null
           id: string
+          included_minutes: number | null
           last_contact: string | null
           lead_id: string | null
           metadata: Json | null
           mrr: number
           name: string
           notes: string | null
+          overage_rate: number | null
           phone: string | null
           plan: string
           start_date: string
           status: string
+          stripe_customer_id: string | null
+          subscription_id: string | null
+          subscription_status: string | null
           updated_at: string
           user_id: string | null
         }
@@ -1548,19 +1617,26 @@ export type Database = {
           business_name?: string | null
           churned_at?: string | null
           created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
           email: string
           health_score?: number | null
           id?: string
+          included_minutes?: number | null
           last_contact?: string | null
           lead_id?: string | null
           metadata?: Json | null
           mrr?: number
           name: string
           notes?: string | null
+          overage_rate?: number | null
           phone?: string | null
           plan?: string
           start_date?: string
           status?: string
+          stripe_customer_id?: string | null
+          subscription_id?: string | null
+          subscription_status?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -1568,19 +1644,26 @@ export type Database = {
           business_name?: string | null
           churned_at?: string | null
           created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
           email?: string
           health_score?: number | null
           id?: string
+          included_minutes?: number | null
           last_contact?: string | null
           lead_id?: string | null
           metadata?: Json | null
           mrr?: number
           name?: string
           notes?: string | null
+          overage_rate?: number | null
           phone?: string | null
           plan?: string
           start_date?: string
           status?: string
+          stripe_customer_id?: string | null
+          subscription_id?: string | null
+          subscription_status?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -4916,6 +4999,60 @@ export type Database = {
         }
         Relationships: []
       }
+      stripe_products: {
+        Row: {
+          billing_interval: string | null
+          created_at: string
+          created_by: string | null
+          currency: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          metadata: Json | null
+          metered_usage_type: string | null
+          name: string
+          pricing_type: string | null
+          stripe_price_id: string | null
+          stripe_product_id: string | null
+          unit_amount: number | null
+          updated_at: string
+        }
+        Insert: {
+          billing_interval?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          metadata?: Json | null
+          metered_usage_type?: string | null
+          name: string
+          pricing_type?: string | null
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          unit_amount?: number | null
+          updated_at?: string
+        }
+        Update: {
+          billing_interval?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          metadata?: Json | null
+          metered_usage_type?: string | null
+          name?: string
+          pricing_type?: string | null
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          unit_amount?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       system_config: {
         Row: {
           config_key: string
@@ -5047,6 +5184,62 @@ export type Database = {
           trigger_reason?: string | null
         }
         Relationships: []
+      }
+      usage_records: {
+        Row: {
+          billing_period_end: string | null
+          billing_period_start: string | null
+          client_id: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          quantity: number
+          recorded_at: string
+          source: string | null
+          stripe_usage_record_id: string | null
+          total_cost: number | null
+          unit_price: number
+          usage_type: string
+        }
+        Insert: {
+          billing_period_end?: string | null
+          billing_period_start?: string | null
+          client_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          quantity?: number
+          recorded_at?: string
+          source?: string | null
+          stripe_usage_record_id?: string | null
+          total_cost?: number | null
+          unit_price?: number
+          usage_type: string
+        }
+        Update: {
+          billing_period_end?: string | null
+          billing_period_start?: string | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          quantity?: number
+          recorded_at?: string
+          source?: string | null
+          stripe_usage_record_id?: string | null
+          total_cost?: number | null
+          unit_price?: number
+          usage_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_records_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_directives: {
         Row: {

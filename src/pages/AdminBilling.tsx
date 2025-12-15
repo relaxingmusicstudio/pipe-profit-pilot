@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -51,8 +52,13 @@ import {
   Eye,
   Trash2,
   FileText,
+  Bot,
+  Clock,
 } from "lucide-react";
 import { format } from "date-fns";
+import UsageDashboard from "@/components/billing/UsageDashboard";
+import BillingAgentActivity from "@/components/billing/BillingAgentActivity";
+import PricingManager from "@/components/billing/PricingManager";
 
 interface InvoiceItem {
   description: string;
@@ -277,8 +283,22 @@ export default function AdminBilling() {
   const totalAmount = items.reduce((sum, item) => sum + item.total, 0);
 
   return (
-    <AdminLayout title="Billing" subtitle="Manage client invoices and payments">
-      {/* Summary Cards */}
+    <AdminLayout title="Billing" subtitle="Manage client invoices, usage, and AI-powered billing">
+      <Tabs defaultValue="invoices" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          <TabsTrigger value="usage">
+            <Clock className="h-4 w-4 mr-1" />
+            Usage
+          </TabsTrigger>
+          <TabsTrigger value="pricing">Pricing</TabsTrigger>
+          <TabsTrigger value="agent">
+            <Bot className="h-4 w-4 mr-1" />
+            AI Agent
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="invoices" className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <Card>
           <CardContent className="pt-6">
@@ -553,7 +573,20 @@ export default function AdminBilling() {
           </Table>
         </CardContent>
       </Card>
+        </TabsContent>
 
+        <TabsContent value="usage">
+          <UsageDashboard />
+        </TabsContent>
+
+        <TabsContent value="pricing">
+          <PricingManager />
+        </TabsContent>
+
+        <TabsContent value="agent">
+          <BillingAgentActivity />
+        </TabsContent>
+      </Tabs>
       {/* View Invoice Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
         <DialogContent className="max-w-lg">
