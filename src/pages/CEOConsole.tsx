@@ -17,7 +17,9 @@ import {
   Activity,
   Mic,
   Heart,
-  Bell
+  Bell,
+  Shield,
+  Workflow
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import CEOChatPanel from "@/components/CEOChatPanel";
@@ -34,6 +36,8 @@ import AnomalyAlerts from "@/components/ceo/AnomalyAlerts";
 import ConversationIntelligence from "@/components/ceo/ConversationIntelligence";
 import MultiTouchAttribution from "@/components/ceo/MultiTouchAttribution";
 import LTVCACCalculator from "@/components/ceo/LTVCACCalculator";
+import ComplianceDashboard from "@/components/ceo/ComplianceDashboard";
+import EnrichmentPipeline from "@/components/ceo/EnrichmentPipeline";
 
 interface Metrics {
   totalRevenue: number;
@@ -437,11 +441,19 @@ const CEOConsole = () => {
 
       {/* Tabs for different dashboard views */}
       <Tabs defaultValue="overview" className="mb-4">
-        <TabsList className="mb-4">
+        <TabsList className="mb-4 flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="revenue">Revenue</TabsTrigger>
           <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="intelligence">Intelligence</TabsTrigger>
+          <TabsTrigger value="compliance" className="flex items-center gap-1">
+            <Shield className="h-3 w-3" />
+            Compliance
+          </TabsTrigger>
+          <TabsTrigger value="enrichment" className="flex items-center gap-1">
+            <Workflow className="h-3 w-3" />
+            Enrichment
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
@@ -588,6 +600,14 @@ const CEOConsole = () => {
               }))}
             />
           </div>
+        </TabsContent>
+
+        <TabsContent value="compliance">
+          <ComplianceDashboard />
+        </TabsContent>
+
+        <TabsContent value="enrichment">
+          <EnrichmentPipeline />
         </TabsContent>
       </Tabs>
       </AdminLayout>

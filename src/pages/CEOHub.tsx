@@ -25,10 +25,12 @@ import {
   FileText,
   ChevronRight,
   RefreshCw,
-  Bell
+  Bell,
+  Shield
 } from "lucide-react";
 import { toast } from "sonner";
 import CEOVoiceAssistant from "@/components/CEOVoiceAssistant";
+import ComplianceEnrichmentWidget from "@/components/ceo/ComplianceEnrichmentWidget";
 
 interface Message {
   role: "user" | "assistant";
@@ -580,6 +582,19 @@ const CEOHub = () => {
                 <Button variant="link" size="sm" className="w-full mt-2" onClick={() => navigate("/admin/automation")}>
                   View Full Activity Log
                 </Button>
+              </CardContent>
+            </Card>
+
+            {/* Compliance & Enrichment Widget */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-green-500" />
+                  Compliance & Leads
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ComplianceEnrichmentWidget />
               </CardContent>
             </Card>
 
