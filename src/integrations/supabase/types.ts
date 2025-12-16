@@ -317,6 +317,7 @@ export type Database = {
           created_at: string
           executed_at: string | null
           id: string
+          is_demo: boolean | null
           priority: number | null
           result: Json | null
           scheduled_at: string | null
@@ -334,6 +335,7 @@ export type Database = {
           created_at?: string
           executed_at?: string | null
           id?: string
+          is_demo?: boolean | null
           priority?: number | null
           result?: Json | null
           scheduled_at?: string | null
@@ -351,6 +353,7 @@ export type Database = {
           created_at?: string
           executed_at?: string | null
           id?: string
+          is_demo?: boolean | null
           priority?: number | null
           result?: Json | null
           scheduled_at?: string | null
@@ -2778,6 +2781,7 @@ export type Database = {
           health_score: number | null
           id: string
           included_minutes: number | null
+          is_demo: boolean | null
           last_contact: string | null
           lead_id: string | null
           metadata: Json | null
@@ -2806,6 +2810,7 @@ export type Database = {
           health_score?: number | null
           id?: string
           included_minutes?: number | null
+          is_demo?: boolean | null
           last_contact?: string | null
           lead_id?: string | null
           metadata?: Json | null
@@ -2834,6 +2839,7 @@ export type Database = {
           health_score?: number | null
           id?: string
           included_minutes?: number | null
+          is_demo?: boolean | null
           last_contact?: string | null
           lead_id?: string | null
           metadata?: Json | null
@@ -3914,6 +3920,7 @@ export type Database = {
           days_in_stage: number | null
           expected_close_date: string | null
           id: string
+          is_demo: boolean | null
           lead_id: string | null
           name: string
           next_action: string | null
@@ -3933,6 +3940,7 @@ export type Database = {
           days_in_stage?: number | null
           expected_close_date?: string | null
           id?: string
+          is_demo?: boolean | null
           lead_id?: string | null
           name: string
           next_action?: string | null
@@ -3952,6 +3960,7 @@ export type Database = {
           days_in_stage?: number | null
           expected_close_date?: string | null
           id?: string
+          is_demo?: boolean | null
           lead_id?: string | null
           name?: string
           next_action?: string | null
@@ -5043,6 +5052,7 @@ export type Database = {
           id: string
           interests: string[] | null
           ip_address: string | null
+          is_demo: boolean | null
           landing_page: string | null
           last_call_date: string | null
           last_call_notes: string | null
@@ -5111,6 +5121,7 @@ export type Database = {
           id?: string
           interests?: string[] | null
           ip_address?: string | null
+          is_demo?: boolean | null
           landing_page?: string | null
           last_call_date?: string | null
           last_call_notes?: string | null
@@ -5179,6 +5190,7 @@ export type Database = {
           id?: string
           interests?: string[] | null
           ip_address?: string | null
+          is_demo?: boolean | null
           landing_page?: string | null
           last_call_date?: string | null
           last_call_notes?: string | null
