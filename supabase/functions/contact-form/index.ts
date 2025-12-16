@@ -1,7 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const GHL_WEBHOOK_URL = Deno.env.get("GHL_WEBHOOK_URL");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -783,6 +786,76 @@ ALWAYS respond with valid JSON only. No markdown, no explanations.`
       body: JSON.stringify(webhookPayload),
     });
     console.log("GHL webhook response status:", ghlResponse.status);
+
+    // ============================================
+    // SAVE LEAD TO LOCAL DATABASE
+    // ============================================
+    let localLeadSaved = false;
+    try {
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        
+        const leadData = {
+          name: name,
+          email: email,
+          phone: phone || null,
+          business_name: derivedBusinessName,
+          trade: businessType || null,
+          team_size: teamSize || null,
+          call_volume: callVolume || null,
+          lead_score: aiAnalysis.score,
+          lead_temperature: aiAnalysis.temperature,
+          status: 'new',
+          source: source,
+          timeline: aiTimeline || null,
+          notes: ghlNotes,
+          form_name: formName,
+          utm_source: utmSource || null,
+          utm_medium: utmMedium || null,
+          utm_campaign: utmCampaign || null,
+          visitor_id: visitorId || null,
+          landing_page: landingPage || null,
+          conversion_probability: aiAnalysis.conversionProb,
+          ai_analysis: {
+            score: aiAnalysis.score,
+            temperature: aiAnalysis.temperature,
+            intent: aiAnalysis.intent,
+            urgency: aiAnalysis.urgency,
+            buyingSignals: aiAnalysis.buyingSignals,
+            objections: aiAnalysis.objections,
+            followup: aiAnalysis.followup,
+            summary: aiAnalysis.summary,
+            keyInsights: aiAnalysis.keyInsights,
+            budgetScore: aiAnalysis.budgetScore,
+            needScore: aiAnalysis.needScore,
+            timelineScore: aiAnalysis.timelineScore,
+          },
+          avg_job_value: avgJobNumeric,
+          missed_calls_monthly: missedCallsNumeric,
+          potential_revenue_loss: potentialLossNumeric,
+          engagement_score: parseInt(engagementScore) || 0,
+          is_qualified: isGoodFit === true,
+        };
+
+        const { data: insertedLead, error: insertError } = await supabase
+          .from('leads')
+          .insert(leadData)
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error("Failed to save lead to local database:", insertError);
+        } else {
+          console.log("Lead saved to local database:", insertedLead?.id);
+          localLeadSaved = true;
+        }
+      } else {
+        console.warn("Supabase credentials not configured - skipping local lead save");
+      }
+    } catch (dbError) {
+      console.error("Error saving lead to local database:", dbError);
+      // Don't fail the request if local save fails - GHL is primary
+    }
 
     // Send confirmation email
     console.log("Sending confirmation email");
