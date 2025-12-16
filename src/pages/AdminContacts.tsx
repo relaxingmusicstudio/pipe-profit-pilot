@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Search, User, Phone, Mail, MessageSquare, Tag, Edit2, X, Save } from "lucide-react";
+import { ArrowLeft, Plus, Search, User, Phone, Mail, MessageSquare, Tag, Edit2, X, Save, Home, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMessaging, Contact } from "@/hooks/useMessaging";
 import { PageChatHeader } from "@/components/PageChatHeader";
-import { StatCardWithTooltip } from "@/components/StatCardWithTooltip";
+import { EmptyState } from "@/components/EmptyState";
+import { AdminBackButton } from "@/components/AdminBackButton";
 
 export default function AdminContacts() {
   const navigate = useNavigate();
@@ -75,68 +76,81 @@ export default function AdminContacts() {
     }
   };
 
+  const getTagColor = (tag: string) => {
+    const colors = [
+      "bg-blue-500/10 text-blue-600 border-blue-500/20",
+      "bg-purple-500/10 text-purple-600 border-purple-500/20",
+      "bg-green-500/10 text-green-600 border-green-500/20",
+      "bg-amber-500/10 text-amber-600 border-amber-500/20",
+      "bg-pink-500/10 text-pink-600 border-pink-500/20",
+    ];
+    const index = tag.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+    return colors[index];
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/admin-analytics")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-xl font-semibold">Contacts</h1>
-          <Badge variant="secondary">{contacts.length} total</Badge>
-        </div>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-1" />
-              Add Contact
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create New Contact</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Name *</Label>
-                <Input
-                  value={newContact.name}
-                  onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
-                  placeholder="John Smith"
-                />
-              </div>
-              <div>
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={newContact.email}
-                  onChange={(e) => setNewContact({ ...newContact, email: e.target.value })}
-                  placeholder="john@example.com"
-                />
-              </div>
-              <div>
-                <Label>Phone</Label>
-                <Input
-                  value={newContact.phone}
-                  onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
-                  placeholder="+1 555 123 4567"
-                />
-              </div>
-              <div>
-                <Label>Tags (comma-separated)</Label>
-                <Input
-                  value={newContact.tags}
-                  onChange={(e) => setNewContact({ ...newContact, tags: e.target.value })}
-                  placeholder="hot-lead, hvac"
-                />
-              </div>
-              <Button onClick={handleCreateContact} className="w-full" disabled={!newContact.name}>
-                Create Contact
+      <header className="border-b bg-card px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <AdminBackButton to="/admin/hub" showHome />
+            <div className="h-6 w-px bg-border" />
+            <h1 className="text-xl font-semibold">Contacts</h1>
+            <Badge variant="secondary">{contacts.length} total</Badge>
+          </div>
+          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-1" />
+                Add Contact
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New Contact</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Name *</Label>
+                  <Input
+                    value={newContact.name}
+                    onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
+                    placeholder="John Smith"
+                  />
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={newContact.email}
+                    onChange={(e) => setNewContact({ ...newContact, email: e.target.value })}
+                    placeholder="john@example.com"
+                  />
+                </div>
+                <div>
+                  <Label>Phone</Label>
+                  <Input
+                    value={newContact.phone}
+                    onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
+                    placeholder="+1 555 123 4567"
+                  />
+                </div>
+                <div>
+                  <Label>Tags (comma-separated)</Label>
+                  <Input
+                    value={newContact.tags}
+                    onChange={(e) => setNewContact({ ...newContact, tags: e.target.value })}
+                    placeholder="hot-lead, hvac"
+                  />
+                </div>
+                <Button onClick={handleCreateContact} className="w-full" disabled={!newContact.name}>
+                  Create Contact
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </header>
 
       <div className="p-4">
@@ -151,9 +165,9 @@ export default function AdminContacts() {
         />
       </div>
 
-      <div className="flex h-[calc(100vh-57px)]">
+      <div className="flex h-[calc(100vh-180px)]">
         {/* Contact List */}
-        <div className="w-80 border-r flex flex-col">
+        <div className="w-80 border-r flex flex-col bg-card/50">
           <div className="p-3 border-b">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -167,9 +181,16 @@ export default function AdminContacts() {
           </div>
           <ScrollArea className="flex-1">
             {filteredContacts.length === 0 ? (
-              <div className="p-4 text-center text-muted-foreground">
-                <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No contacts found</p>
+              <div className="p-4">
+                <EmptyState
+                  variant="contacts"
+                  title="No contacts found"
+                  description={searchQuery ? "Try a different search term" : "Add your first contact to get started"}
+                  action={!searchQuery ? {
+                    label: "Add Contact",
+                    onClick: () => setIsCreateOpen(true)
+                  } : undefined}
+                />
               </div>
             ) : (
               filteredContacts.map((contact) => (
@@ -181,11 +202,11 @@ export default function AdminContacts() {
                     setIsEditing(false);
                   }}
                   className={`p-3 border-b cursor-pointer hover:bg-muted/50 transition-colors ${
-                    selectedContact?.id === contact.id ? "bg-muted" : ""
+                    selectedContact?.id === contact.id ? "bg-muted border-l-2 border-l-primary" : ""
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center flex-shrink-0">
                       <User className="h-5 w-5 text-primary" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -198,7 +219,7 @@ export default function AdminContacts() {
                   {contact.tags && contact.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
                       {contact.tags.slice(0, 3).map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-xs">
+                        <Badge key={tag} className={`text-xs ${getTagColor(tag)}`}>
                           {tag}
                         </Badge>
                       ))}
@@ -216,33 +237,35 @@ export default function AdminContacts() {
         </div>
 
         {/* Contact Details */}
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-6 overflow-y-auto">
           {selectedContact ? (
             <div className="max-w-2xl mx-auto space-y-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="text-lg">Contact Details</CardTitle>
-                  <div className="flex gap-2">
-                    {isEditing ? (
-                      <>
-                        <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
-                          <X className="h-4 w-4 mr-1" />
-                          Cancel
+              <Card className="border-0 shadow-lg">
+                <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 rounded-t-lg">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">Contact Details</CardTitle>
+                    <div className="flex gap-2">
+                      {isEditing ? (
+                        <>
+                          <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
+                            <X className="h-4 w-4 mr-1" />
+                            Cancel
+                          </Button>
+                          <Button size="sm" onClick={handleUpdateContact}>
+                            <Save className="h-4 w-4 mr-1" />
+                            Save
+                          </Button>
+                        </>
+                      ) : (
+                        <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                          <Edit2 className="h-4 w-4 mr-1" />
+                          Edit
                         </Button>
-                        <Button size="sm" onClick={handleUpdateContact}>
-                          <Save className="h-4 w-4 mr-1" />
-                          Save
-                        </Button>
-                      </>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-                        <Edit2 className="h-4 w-4 mr-1" />
-                        Edit
-                      </Button>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 pt-6">
                   {isEditing ? (
                     <>
                       <div>
@@ -277,48 +300,48 @@ export default function AdminContacts() {
                     </>
                   ) : (
                     <>
-                      <div className="flex items-center gap-3">
-                        <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-                          <User className="h-8 w-8 text-primary" />
+                      <div className="flex items-center gap-4">
+                        <div className="h-20 w-20 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
+                          <User className="h-10 w-10 text-primary" />
                         </div>
                         <div>
-                          <h2 className="text-xl font-semibold">{selectedContact.name || "Unnamed"}</h2>
+                          <h2 className="text-2xl font-bold">{selectedContact.name || "Unnamed"}</h2>
                           <p className="text-sm text-muted-foreground">
-                            Created {new Date(selectedContact.created_at).toLocaleDateString()}
+                            Added {new Date(selectedContact.created_at).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
 
-                      <div className="grid gap-3">
+                      <div className="grid gap-3 pt-4">
                         {selectedContact.email && (
-                          <div className="flex items-center gap-3 text-sm">
-                            <Mail className="h-4 w-4 text-muted-foreground" />
-                            <span>{selectedContact.email}</span>
+                          <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                            <Mail className="h-5 w-5 text-blue-500" />
+                            <span className="text-sm">{selectedContact.email}</span>
                           </div>
                         )}
                         {selectedContact.phone && (
-                          <div className="flex items-center gap-3 text-sm">
-                            <Phone className="h-4 w-4 text-muted-foreground" />
-                            <span>{selectedContact.phone}</span>
+                          <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                            <Phone className="h-5 w-5 text-green-500" />
+                            <span className="text-sm">{selectedContact.phone}</span>
                           </div>
                         )}
                         {selectedContact.whatsapp_id && (
-                          <div className="flex items-center gap-3 text-sm">
-                            <MessageSquare className="h-4 w-4 text-green-500" />
-                            <span>WhatsApp: {selectedContact.whatsapp_id}</span>
+                          <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                            <MessageSquare className="h-5 w-5 text-emerald-500" />
+                            <span className="text-sm">WhatsApp: {selectedContact.whatsapp_id}</span>
                           </div>
                         )}
                       </div>
 
                       {selectedContact.tags && selectedContact.tags.length > 0 && (
-                        <div>
-                          <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
+                        <div className="pt-4">
+                          <div className="flex items-center gap-2 mb-3 text-sm text-muted-foreground">
                             <Tag className="h-4 w-4" />
                             <span>Tags</span>
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {selectedContact.tags.map((tag) => (
-                              <Badge key={tag} variant="secondary">
+                              <Badge key={tag} className={getTagColor(tag)}>
                                 {tag}
                               </Badge>
                             ))}
@@ -327,9 +350,9 @@ export default function AdminContacts() {
                       )}
 
                       {selectedContact.notes && (
-                        <div>
-                          <p className="text-sm text-muted-foreground mb-1">Notes</p>
-                          <p className="text-sm">{selectedContact.notes}</p>
+                        <div className="pt-4 border-t">
+                          <p className="text-sm text-muted-foreground mb-2">Notes</p>
+                          <p className="text-sm bg-muted/30 p-3 rounded-lg">{selectedContact.notes}</p>
                         </div>
                       )}
                     </>
@@ -348,8 +371,9 @@ export default function AdminContacts() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleQuickMessage(selectedContact, "sms")}
+                        className="gap-1.5"
                       >
-                        <Phone className="h-4 w-4 mr-1" />
+                        <Phone className="h-4 w-4 text-blue-500" />
                         Send SMS
                       </Button>
                     )}
@@ -358,9 +382,10 @@ export default function AdminContacts() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleQuickMessage(selectedContact, "whatsapp")}
+                        className="gap-1.5"
                       >
-                        <MessageSquare className="h-4 w-4 mr-1 text-green-500" />
-                        Send WhatsApp
+                        <MessageSquare className="h-4 w-4 text-green-500" />
+                        WhatsApp
                       </Button>
                     )}
                     {selectedContact.email && (
@@ -368,17 +393,19 @@ export default function AdminContacts() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleQuickMessage(selectedContact, "email")}
+                        className="gap-1.5"
                       >
-                        <Mail className="h-4 w-4 mr-1 text-blue-500" />
-                        Send Email
+                        <Mail className="h-4 w-4 text-purple-500" />
+                        Email
                       </Button>
                     )}
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => navigate("/admin/inbox")}
+                      className="gap-1.5"
                     >
-                      <MessageSquare className="h-4 w-4 mr-1" />
+                      <MessageSquare className="h-4 w-4" />
                       View Conversations
                     </Button>
                   </CardContent>
@@ -386,12 +413,16 @@ export default function AdminContacts() {
               )}
             </div>
           ) : (
-            <div className="h-full flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <h3 className="text-lg font-medium">Select a contact</h3>
-                <p className="text-sm">Choose a contact from the list to view details</p>
-              </div>
+            <div className="h-full flex items-center justify-center">
+              <EmptyState
+                variant="contacts"
+                title="Select a contact"
+                description="Choose a contact from the list to view their details and take actions"
+                action={contacts.length === 0 ? {
+                  label: "Add First Contact",
+                  onClick: () => setIsCreateOpen(true)
+                } : undefined}
+              />
             </div>
           )}
         </div>

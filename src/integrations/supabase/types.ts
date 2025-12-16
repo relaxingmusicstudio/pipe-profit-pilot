@@ -4728,6 +4728,42 @@ export type Database = {
           },
         ]
       }
+      human_ratings: {
+        Row: {
+          created_at: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          notes: string | null
+          rated_by: string | null
+          rating: string | null
+          saved_to_vault: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          notes?: string | null
+          rated_by?: string | null
+          rating?: string | null
+          saved_to_vault?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          notes?: string | null
+          rated_by?: string | null
+          rating?: string | null
+          saved_to_vault?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       integration_permission_violations: {
         Row: {
           agent_name: string
