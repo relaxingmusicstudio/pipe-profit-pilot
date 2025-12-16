@@ -212,15 +212,15 @@ const BusinessHealthScore = () => {
           </div>
           
           <div className="flex-1 space-y-2">
-            {Object.entries(healthScore.breakdown).slice(0, 3).map(([key, component]) => (
+            {healthScore.breakdown && Object.entries(healthScore.breakdown).slice(0, 3).map(([key, component]) => (
               <div key={key} className="flex items-center gap-2">
                 <span className="text-muted-foreground">{getScoreIcon(key)}</span>
                 <div className="flex-1">
                   <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-muted-foreground">{component.label}</span>
-                    <span className="font-medium">{component.score}%</span>
+                    <span className="text-muted-foreground">{component?.label || key}</span>
+                    <span className="font-medium">{component?.score || 0}%</span>
                   </div>
-                  <Progress value={component.score} className="h-1.5" />
+                  <Progress value={component?.score || 0} className="h-1.5" />
                 </div>
               </div>
             ))}
@@ -228,19 +228,21 @@ const BusinessHealthScore = () => {
         </div>
 
         {/* Component Breakdown Grid */}
-        <div className="grid grid-cols-5 gap-2">
-          {Object.entries(healthScore.breakdown).map(([key, component]) => (
-            <div
-              key={key}
-              className={`p-2 rounded-lg ${getScoreColor(component.score)} bg-opacity-10 text-center`}
-            >
-              <div className="flex justify-center mb-1">
-                {getScoreIcon(key)}
+        {healthScore.breakdown && (
+          <div className="grid grid-cols-5 gap-2">
+            {Object.entries(healthScore.breakdown).map(([key, component]) => (
+              <div
+                key={key}
+                className={`p-2 rounded-lg ${getScoreColor(component?.score || 0)} bg-opacity-10 text-center`}
+              >
+                <div className="flex justify-center mb-1">
+                  {getScoreIcon(key)}
+                </div>
+                <span className="text-lg font-bold">{component?.score || 0}</span>
               </div>
-              <span className="text-lg font-bold">{component.score}</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         {/* Key Insights */}
         {healthScore.insights.length > 0 && (

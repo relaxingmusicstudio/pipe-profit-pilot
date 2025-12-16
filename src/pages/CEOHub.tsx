@@ -27,7 +27,9 @@ import {
   RefreshCw,
   Bell,
   Shield,
-  Video
+  Video,
+  ArrowLeft,
+  Home
 } from "lucide-react";
 import { toast } from "sonner";
 import CEOVoiceAssistant from "@/components/CEOVoiceAssistant";
@@ -40,6 +42,7 @@ import VideoCostAnalytics from "@/components/video/VideoCostAnalytics";
 import FinanceHealthWidget from "@/components/finance/FinanceHealthWidget";
 import AICostAnalytics from "@/components/ceo/AICostAnalytics";
 import BusinessHealthScore from "@/components/ceo/BusinessHealthScore";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 interface Message {
   role: "user" | "assistant";
@@ -318,12 +321,23 @@ const CEOHub = () => {
       <header className="hero-gradient text-primary-foreground">
         <div className="container py-6">
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <Bot className="h-6 w-6" />
-                CEO Command Center
-              </h1>
-              <p className="text-primary-foreground/70 text-sm">Chat with your business. Get things done.</p>
+            <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/")}
+                className="text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10 gap-1"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Button>
+              <div>
+                <h1 className="text-2xl font-bold flex items-center gap-2">
+                  <Bot className="h-6 w-6" />
+                  CEO Command Center
+                </h1>
+                <p className="text-primary-foreground/70 text-sm">Chat with your business. Get things done.</p>
+              </div>
             </div>
             <div className="flex gap-2">
               <Button
@@ -536,7 +550,13 @@ const CEOHub = () => {
           {/* Side Panel */}
           <div className="space-y-4">
             {/* Business Health Score - Primary KPI Widget */}
-            <BusinessHealthScore />
+            <ErrorBoundary fallback={
+              <Card className="p-4">
+                <p className="text-sm text-muted-foreground text-center">Health score unavailable</p>
+              </Card>
+            }>
+              <BusinessHealthScore />
+            </ErrorBoundary>
 
             {/* Pending Approvals */}
             <Card>
