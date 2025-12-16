@@ -21,21 +21,12 @@ const Footer = () => {
             <Link to="/cookies" className="hover:text-accent transition-colors">Cookie Policy</Link>
             <a href="#contact" className="hover:text-accent transition-colors">Contact Us</a>
             <Link 
-              to="/auth" 
+              to={isAdmin ? "/app" : "/auth"} 
               className="hover:text-accent transition-colors flex items-center gap-1"
             >
               <Brain className="w-3 h-3" />
-              Admin Login
+              {isAdmin ? "Command Center" : "Admin Login"}
             </Link>
-            {isAdmin && (
-              <Link 
-                to="/admin/ceo" 
-                className="hover:text-accent transition-colors flex items-center gap-1"
-              >
-                <Brain className="w-3 h-3" />
-                CEO Console
-              </Link>
-            )}
           </div>
           <div className="mt-8 text-primary-foreground/40 text-sm">
             © 2024 ApexLocal360. All rights reserved.

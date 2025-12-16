@@ -1,6 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useClickThrough } from "@/hooks/useClickThrough";
 import { useNavigate } from "react-router-dom";
 import { 
   Zap, 
@@ -16,36 +15,29 @@ import {
 interface QuickAction {
   label: string;
   icon: React.ElementType;
-  path?: string;
-  entity?: string;
-  filter?: Record<string, string>;
+  path: string;
   variant?: "default" | "outline" | "secondary";
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { label: "Hot Leads", icon: Zap, entity: "crm", filter: { filter: "hot" }, variant: "default" },
-  { label: "Approve Content", icon: CheckCircle2, entity: "approvals", variant: "outline" },
-  { label: "Pipeline", icon: Target, entity: "pipeline", variant: "outline" },
+  { label: "Hot Leads", icon: Zap, path: "/admin/leads?filter=hot", variant: "default" },
+  { label: "Approve Content", icon: CheckCircle2, path: "/admin/approval-queue", variant: "outline" },
+  { label: "Pipeline", icon: Target, path: "/admin/pipeline", variant: "outline" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics", variant: "outline" },
 ];
 
 const SECONDARY_ACTIONS: QuickAction[] = [
-  { label: "CRM", icon: Users, entity: "crm" },
-  { label: "Content", icon: FileText, entity: "content" },
+  { label: "CRM", icon: Users, path: "/admin/crm" },
+  { label: "Content", icon: FileText, path: "/admin/content" },
   { label: "Dialer", icon: Phone, path: "/admin/dialer" },
-  { label: "Settings", icon: Settings, entity: "settings" },
+  { label: "Settings", icon: Settings, path: "/admin/settings" },
 ];
 
 export function QuickActionsPanel() {
-  const { navigateToDetail } = useClickThrough();
   const navigate = useNavigate();
 
   const handleAction = (action: QuickAction) => {
-    if (action.path) {
-      navigate(action.path);
-    } else if (action.entity) {
-      navigateToDetail(action.entity as any, action.filter);
-    }
+    navigate(action.path);
   };
 
   return (
