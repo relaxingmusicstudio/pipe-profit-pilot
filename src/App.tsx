@@ -66,6 +66,7 @@ import DualWorkspaceLayout from "./layouts/DualWorkspaceLayout";
 import AICEODashboard from "./pages/AICEODashboard";
 import CommandCenterHome from "./pages/CommandCenterHome";
 import KnowledgeVault from "./pages/KnowledgeVault";
+import UnifiedDashboard from "./pages/UnifiedDashboard";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -98,27 +99,29 @@ const App = () => (
                 <Route path="/cookies" element={<CookiePolicy />} />
                 <Route path="/auth" element={<Auth />} />
                 
-                {/* Dual Workspace Architecture - New Routes */}
-                <Route path="/app" element={<ProtectedRoute requireAdmin><DualWorkspaceLayout /></ProtectedRoute>}>
-                  <Route index element={<AICEODashboard />} />
+                {/* Unified Dashboard - Single Entry Point */}
+                <Route path="/app" element={<ProtectedRoute requireAdmin><UnifiedDashboard /></ProtectedRoute>} />
+                
+                {/* Detail Views with DualWorkspaceLayout */}
+                <Route path="/app/details" element={<ProtectedRoute requireAdmin><DualWorkspaceLayout /></ProtectedRoute>}>
                   <Route path="ceo" element={<AICEODashboard />} />
                   <Route path="command-center" element={<CommandCenterHome />} />
-                  <Route path="command-center/crm" element={<AdminCRM />} />
-                  <Route path="command-center/pipeline" element={<AdminPipeline />} />
-                  <Route path="command-center/content" element={<AdminContent />} />
-                  <Route path="command-center/sequences" element={<AdminSequences />} />
-                  <Route path="command-center/clients" element={<AdminClients />} />
-                  <Route path="command-center/approvals" element={<AdminApprovalQueue />} />
-                  <Route path="command-center/vault" element={<KnowledgeVault />} />
-                  <Route path="command-center/system-health" element={<AdminSystemHealth />} />
-                  <Route path="command-center/settings" element={<AdminSettings />} />
-                  <Route path="command-center/analytics" element={<AdminAnalytics />} />
+                  <Route path="crm" element={<AdminCRM />} />
+                  <Route path="pipeline" element={<AdminPipeline />} />
+                  <Route path="content" element={<AdminContent />} />
+                  <Route path="sequences" element={<AdminSequences />} />
+                  <Route path="clients" element={<AdminClients />} />
+                  <Route path="approvals" element={<AdminApprovalQueue />} />
+                  <Route path="vault" element={<KnowledgeVault />} />
+                  <Route path="system-health" element={<AdminSystemHealth />} />
+                  <Route path="settings" element={<AdminSettings />} />
+                  <Route path="analytics" element={<AdminAnalytics />} />
                 </Route>
                 
                 {/* Legacy Admin Routes */}
                 <Route path="/admin/analytics" element={<ProtectedRoute requireAdmin><AdminAnalytics /></ProtectedRoute>} />
-                <Route path="/admin/hub" element={<ProtectedRoute requireAdmin><CEOHub /></ProtectedRoute>} />
-                <Route path="/admin/ceo" element={<ProtectedRoute requireAdmin><CEOConsole /></ProtectedRoute>} />
+                <Route path="/admin/hub" element={<ProtectedRoute requireAdmin><UnifiedDashboard /></ProtectedRoute>} />
+                <Route path="/admin/ceo" element={<ProtectedRoute requireAdmin><UnifiedDashboard /></ProtectedRoute>} />
                 <Route path="/admin/inbox" element={<ProtectedRoute requireAdmin><AdminInbox /></ProtectedRoute>} />
                 <Route path="/admin/contacts" element={<ProtectedRoute requireAdmin><AdminContacts /></ProtectedRoute>} />
                 <Route path="/admin/clients" element={<ProtectedRoute requireAdmin><AdminClients /></ProtectedRoute>} />
