@@ -385,133 +385,21 @@ async function evaluateConditions(supabase: any, order: StandingOrder): Promise<
   return false;
 }
 
-async function executeAction(supabase: any, order: StandingOrder, config: AutopilotConfig | null, eventData?: any) {
-  const { action_type, action_payload } = order;
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+// ===========================================================================
+// GOVERNANCE: executeAction REMOVED - System is Propose-Only
+// ===========================================================================
+// This function previously contained code that would execute side effects
+// (SMS alerts, campaign pauses, external API calls) when called.
+// 
+// It has been REMOVED to enforce the Propose-Only governance model:
+// - All actions MUST be queued as pending_approval
+// - Approval only changes status, it does NOT execute
+// - Execution requires a separate manual "Execute" action (not yet implemented)
+//
+// If execution is ever needed, it must be:
+// 1. Triggered by an explicit human "Execute" button
+// 2. Protected by admin authentication
+// 3. Logged comprehensively for audit
+// ===========================================================================
 
-  console.log(`[CEO Autopilot] Executing action: ${action_type}`);
-
-  switch (action_type) {
-    case "send_priority_notification":
-      // Send SMS/Email notification
-      await fetch(`${supabaseUrl}/functions/v1/sms-alert`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-        body: JSON.stringify({
-          message: `🚨 AUTO-ACTION: ${order.rule_name} triggered. ${JSON.stringify(eventData || {})}`,
-          priority: "high",
-          source: "ceo-autopilot"
-        })
-      });
-      return { notified: true, channel: action_payload.channel };
-
-    case "trigger_intervention":
-      // Create CEO alert for intervention
-      await supabase.from("ceo_alerts").insert({
-        alert_type: "intervention_triggered",
-        title: `Auto-Intervention: ${order.rule_name}`,
-        message: `Autopilot triggered retention sequence for at-risk client`,
-        priority: action_payload.priority || "high",
-        source: "ceo-autopilot",
-        metadata: eventData
-      });
-      return { intervention_started: true };
-
-    case "escalate_to_ceo":
-      await fetch(`${supabaseUrl}/functions/v1/sms-alert`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-        body: JSON.stringify({
-          message: `🚨 CRITICAL: ${order.rule_name} - Immediate attention required`,
-          priority: "critical",
-          source: "ceo-autopilot"
-        })
-      });
-      return { escalated: true };
-
-    case "send_followup":
-      // Queue follow-up emails for stale leads
-      const staleDays = order.conditions.stale_days || 3;
-      const staleDate = new Date();
-      staleDate.setDate(staleDate.getDate() - staleDays);
-
-      const { data: staleLeads } = await supabase
-        .from("leads")
-        .select("*")
-        .lt("last_contact_at", staleDate.toISOString())
-        .in("status", ["new", "contacted"])
-        .limit(10);
-
-      for (const lead of staleLeads || []) {
-        // GOVERNANCE: All queue inserts MUST have decision_card
-        const followupDecisionCard: DecisionCard = {
-          decision_type: 'send_followup',
-          summary: `Follow up on stale lead: ${lead.name || lead.id}`.slice(0, 180),
-          why_now: `Lead has been stale for ${staleDays}+ days without contact`,
-          expected_impact: 'Re-engage lead and move to next pipeline stage',
-          cost: '5 minutes automated email',
-          risk: 'low - standard follow-up sequence',
-          reversibility: 'easy',
-          requires: ['Human approval'],
-          confidence: 0.7,
-          proposed_payload: { template: action_payload.template, lead_name: lead.name },
-        };
-
-        const validation = validateDecisionCard(followupDecisionCard);
-        if (validation.isValid) {
-          await supabase.from("action_queue").insert({
-            agent_type: "email-agent",
-            action_type: "send_followup",
-            target_type: "lead",
-            target_id: lead.id,
-            action_payload: wrapWithDecisionCard(validation.normalizedDecision!, { template: action_payload.template, lead_name: lead.name }),
-            priority: 5,
-            status: 'pending_approval' // GOVERNANCE: Always pending_approval
-          });
-        } else {
-          logValidationFailure('ceo-autopilot:send_followup', followupDecisionCard, validation);
-        }
-      }
-      return { followups_queued: (staleLeads || []).length };
-
-    case "pause_campaign":
-      // Auto-pause underperforming campaigns
-      const { data: badCampaigns } = await supabase
-        .from("ad_campaigns")
-        .select("*")
-        .eq("status", "active");
-
-      let paused = 0;
-      for (const campaign of badCampaigns || []) {
-        const perf = campaign.performance || {};
-        const spend = perf.spend || 0;
-        const revenue = perf.revenue || 0;
-        const roas = spend > 0 ? revenue / spend : 0;
-
-        if (spend >= (order.conditions.min_spend || 100) && roas < (order.conditions.below || 1.0)) {
-          await supabase
-            .from("ad_campaigns")
-            .update({ status: "paused" })
-            .eq("id", campaign.id);
-          paused++;
-        }
-      }
-      return { campaigns_paused: paused };
-
-    case "send_celebration":
-      await supabase.from("ceo_alerts").insert({
-        alert_type: "celebration",
-        title: `🎉 Big Win! Deal Closed`,
-        message: `New deal worth $${eventData?.value?.toLocaleString() || "N/A"} closed!`,
-        priority: "info",
-        source: "ceo-autopilot",
-        metadata: eventData
-      });
-      return { celebrated: true };
-
-    default:
-      console.log(`[CEO Autopilot] Unknown action type: ${action_type}`);
-      return { skipped: true, reason: "unknown_action" };
-  }
-}
+// Dead code removed for governance compliance. DO NOT re-add execution logic.
