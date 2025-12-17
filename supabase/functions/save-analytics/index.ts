@@ -50,7 +50,8 @@ serve(async (req) => {
     
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
-    
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       console.error("Missing env vars - URL:", !!SUPABASE_URL, "KEY:", !!SUPABASE_ANON_KEY);
       return new Response(JSON.stringify({ error: "Server configuration error" }), {
@@ -58,9 +59,23 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    
-    // Use anon key for analytics - RLS will handle access control
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+
+    // Default: use anon key with request auth forwarded (so RLS can evaluate authenticated users).
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: authHeader ? { Authorization: authHeader } : {},
+      },
+      auth: { persistSession: false },
+    });
+
+    // Admin client for server-controlled writes (analytics capture must not 500 the app).
+    const supabaseAdmin = SUPABASE_SERVICE_ROLE_KEY
+      ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+          auth: { persistSession: false },
+        })
+      : null;
     
     console.log(`Save analytics action: ${action}`);
     
@@ -69,26 +84,43 @@ serve(async (req) => {
         const visitorData = data as VisitorData;
         
         // Use upsert to handle race conditions atomically
-        const { error } = await supabase
+        // Prefer admin client so analytics capture does not 500 due to RLS.
+        const db = supabaseAdmin ?? supabase;
+
+        const { error } = await db
           .from("visitors")
-          .upsert({
-            visitor_id: visitorData.visitorId,
-            device: visitorData.device,
-            browser: visitorData.browser,
-            utm_source: visitorData.utmSource,
-            utm_medium: visitorData.utmMedium,
-            utm_campaign: visitorData.utmCampaign,
-            landing_page: visitorData.landingPage,
-            referrer: visitorData.referrer,
-            last_seen_at: new Date().toISOString(),
-          }, {
-            onConflict: 'visitor_id',
-            ignoreDuplicates: false
-          });
-        
+          .upsert(
+            {
+              visitor_id: visitorData.visitorId,
+              device: visitorData.device,
+              browser: visitorData.browser,
+              utm_source: visitorData.utmSource,
+              utm_medium: visitorData.utmMedium,
+              utm_campaign: visitorData.utmCampaign,
+              landing_page: visitorData.landingPage,
+              referrer: visitorData.referrer,
+              last_seen_at: new Date().toISOString(),
+            },
+            {
+              onConflict: "visitor_id",
+              ignoreDuplicates: false,
+            }
+          );
+
         if (error) {
           console.error("Upsert visitor error:", error);
-          throw error;
+          // Analytics must never crash the app; report non-fatal failure.
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: "visitor_upsert_failed",
+              details: (error as any)?.message ?? String(error),
+              code: (error as any)?.code ?? null,
+            }),
+            {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
+          );
         }
         
         console.log("Upserted visitor:", visitorData.visitorId);
