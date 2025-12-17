@@ -70,7 +70,7 @@ export default function ApprovalQueue() {
         supabase
           .from("queue_unified")
           .select("*")
-          .in("status", ["pending_approval", "pending", "pending_review"])
+          .eq("status", "pending_approval")
           .order("priority", { ascending: false })
           .order("created_at", { ascending: false })
           .limit(50),
