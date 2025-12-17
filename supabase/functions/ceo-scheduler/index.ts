@@ -734,11 +734,13 @@ async function actionizeTenantBrief(supabase: SupabaseClient, tenantId: string, 
 async function hasCostAlertRecently(supabase: SupabaseClient, tenantId: string): Promise<boolean> {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
+  // Use PostgREST JSON operator for exact tenant match (not global alerts)
+  // This ensures we only check for THIS tenant's cost alerts, not others
   const { count } = await supabase
     .from("ceo_alerts")
     .select("id", { count: "exact", head: true })
     .eq("alert_type", "cost_spike")
-    .contains("metadata", { tenant_id: tenantId })
+    .filter("metadata->>tenant_id", "eq", tenantId)
     .gte("created_at", yesterday);
 
   return (count || 0) > 0;

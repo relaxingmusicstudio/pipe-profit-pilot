@@ -37,26 +37,20 @@ export function CEOAlertsPanel({ tenantId }: CEOAlertsPanelProps) {
 
     setLoading(true);
     try {
-      // ceo_alerts stores tenant_id in metadata JSON, not as a column
-      // Filter by metadata->tenant_id matching our tenant OR global alerts (no tenant_id in metadata)
+      // Server-side filtering: tenant's alerts OR global alerts (metadata.tenant_id is null)
+      // Using PostgREST JSON operator syntax for proper filtering
       const { data, error } = await supabase
         .from("ceo_alerts")
         .select("*")
+        .or(`metadata->>tenant_id.eq.${tenantId},metadata->>tenant_id.is.null,metadata->tenant_id.is.null`)
         .order("created_at", { ascending: false })
-        .limit(50);
+        .limit(20);
 
       if (error) {
         console.error("Failed to fetch alerts:", error);
         setAlerts([]);
       } else {
-        // Client-side filter for tenant isolation since tenant_id is in metadata
-        const filtered = (data || []).filter((alert) => {
-          const metadata = alert.metadata as Record<string, unknown> | null;
-          const alertTenantId = metadata?.tenant_id as string | null | undefined;
-          // Include if: matches our tenant OR no tenant specified (global alert)
-          return alertTenantId === tenantId || alertTenantId === null || alertTenantId === undefined;
-        });
-        setAlerts(filtered.slice(0, 20) as Alert[]);
+        setAlerts((data || []) as Alert[]);
       }
     } catch (error) {
       console.error("Failed to load alerts:", error);
@@ -69,27 +63,30 @@ export function CEOAlertsPanel({ tenantId }: CEOAlertsPanelProps) {
   const acknowledgeAlert = async (alertId: string) => {
     if (!tenantId) return;
 
-    // First verify this alert belongs to our tenant
+    // UI guard: verify alert is in our loaded list
     const alert = alerts.find((a) => a.id === alertId);
     if (!alert) {
       toast.error("Alert not found");
       return;
     }
 
-    const metadata = alert.metadata as Record<string, unknown> | null;
-    const alertTenantId = metadata?.tenant_id as string | null | undefined;
-    if (alertTenantId && alertTenantId !== tenantId) {
-      toast.error("Cannot acknowledge alert from another tenant");
-      return;
-    }
-
     try {
-      const { error } = await supabase
+      // Server-side tenant safety: only update if alert belongs to this tenant OR is global
+      // Using PostgREST JSON operator for metadata filtering
+      const { data, error } = await supabase
         .from("ceo_alerts")
         .update({ acknowledged_at: new Date().toISOString() })
-        .eq("id", alertId);
+        .eq("id", alertId)
+        .or(`metadata->>tenant_id.eq.${tenantId},metadata->>tenant_id.is.null,metadata->tenant_id.is.null`)
+        .select("id");
 
       if (error) throw error;
+
+      // Check if update actually affected a row (tenant validation passed)
+      if (!data || data.length === 0) {
+        toast.error("Cannot acknowledge this alert");
+        return;
+      }
 
       setAlerts((prev) =>
         prev.map((a) =>
