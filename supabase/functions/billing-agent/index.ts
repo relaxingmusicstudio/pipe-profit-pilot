@@ -362,6 +362,8 @@ serve(async (req: Request): Promise<Response> => {
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      // GOVERNANCE: approve_action ONLY changes status - NO execution
+      // System is Propose-Only. Approved actions sit in queue until manual execution is implemented.
       case 'approve_action': {
         const { action_id, approved_by } = body as any;
 
@@ -373,45 +375,34 @@ serve(async (req: Request): Promise<Response> => {
 
         if (!actionRecord) throw new Error('Action not found');
 
+        // GOVERNANCE: Only update status to approved - DO NOT execute side effects
+        // Execution (Stripe refunds, etc.) requires a separate human "Execute" action
         await supabase
           .from('billing_agent_actions')
           .update({
             human_approved: true,
             approved_by,
+            // Note: executed_at remains null until manual execution is implemented
           })
           .eq('id', action_id);
 
-        // If it's a refund, process it now
-        if (actionRecord.action_type === 'refund' && stripe && actionRecord.target_id) {
-          const { data: invoice } = await supabase
-            .from('client_invoices')
-            .select('*')
-            .eq('id', actionRecord.target_id)
-            .single();
+        // Log audit: approval recorded, no execution
+        await logAudit(supabase, {
+          agent_name: 'billing-agent',
+          action_type: 'approve_action',
+          entity_type: 'billing_action',
+          entity_id: action_id,
+          description: `Action approved by ${approved_by}. No execution performed (Propose-Only governance).`,
+          success: true,
+          request_snapshot: { action_id, approved_by },
+          response_snapshot: { status: 'approved_no_execution' },
+        });
 
-          if (invoice?.stripe_payment_intent_id) {
-            const refund = await stripe.refunds.create({
-              payment_intent: invoice.stripe_payment_intent_id,
-              amount: Math.round((actionRecord.amount || invoice.amount) * 100),
-              reason: 'requested_by_customer',
-            });
-
-            await supabase
-              .from('billing_agent_actions')
-              .update({
-                executed_at: new Date().toISOString(),
-                result: { refund_id: refund.id, status: refund.status },
-              })
-              .eq('id', action_id);
-
-            await supabase
-              .from('client_invoices')
-              .update({ status: 'refunded' })
-              .eq('id', invoice.id);
-          }
-        }
-
-        return new Response(JSON.stringify({ success: true, message: 'Action approved and executed' }), {
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'Action approved. Execution requires separate manual action (Propose-Only mode).',
+          governance: 'No side effects performed. Status updated to approved only.'
+        }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }

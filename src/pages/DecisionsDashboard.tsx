@@ -134,10 +134,21 @@ export default function DecisionsDashboard() {
     }
   };
 
+  // ===========================================================================
+  // GOVERNANCE: handleApprove ONLY changes status - NO execution
+  // ===========================================================================
+  // System is Propose-Only. This function:
+  // 1. Updates status to "approved"
+  // 2. Records review timestamp
+  // 3. Does NOT trigger any side effects (no API calls, no emails, no webhooks)
+  //
+  // Execution of approved actions requires a SEPARATE manual process (not implemented)
+  // ===========================================================================
   const handleApprove = async (decision: DecisionItem) => {
     setProcessingId(decision.id);
     try {
       const table = (decision as any).source === 'ceo_action_queue' ? 'ceo_action_queue' : 'action_queue';
+      // GOVERNANCE: Only status change - no execution logic here
       const { error } = await supabase
         .from(table)
         .update({ 
@@ -147,7 +158,7 @@ export default function DecisionsDashboard() {
         .eq("id", decision.id);
 
       if (error) throw error;
-      toast.success("Decision approved");
+      toast.success("Decision approved (no execution - Propose-Only mode)");
       fetchDecisions();
     } catch (error) {
       toast.error("Failed to approve");
