@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { aiChat, parseAIError } from "../_shared/ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,36 +52,27 @@ serve(async (req) => {
       });
     }
 
-    // Generate script if not provided
+    // Generate script if not provided using shared AI helper
     let videoScript = script;
     if (!videoScript && topic) {
-      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-      if (LOVABLE_API_KEY) {
-        const scriptResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              { 
-                role: "system", 
-                content: "You are a video script writer. Write concise, engaging scripts for AI avatar videos. Keep scripts under 60 seconds when read aloud. Be conversational and professional." 
-              },
-              { 
-                role: "user", 
-                content: `Write a short video script about: ${topic}. Make it engaging and suitable for a professional AI avatar presentation.` 
-              }
-            ]
-          })
+      try {
+        const result = await aiChat({
+          messages: [
+            { 
+              role: "system", 
+              content: "You are a video script writer. Write concise, engaging scripts for AI avatar videos. Keep scripts under 60 seconds when read aloud. Be conversational and professional." 
+            },
+            { 
+              role: "user", 
+              content: `Write a short video script about: ${topic}. Make it engaging and suitable for a professional AI avatar presentation.` 
+            }
+          ],
+          purpose: "video_script",
         });
-
-        if (scriptResponse.ok) {
-          const scriptData = await scriptResponse.json();
-          videoScript = scriptData.choices?.[0]?.message?.content || "";
-        }
+        videoScript = result.text;
+      } catch (aiError) {
+        console.error("[heygen-video] Script generation error:", parseAIError(aiError));
+        videoScript = `Welcome! Today we're discussing ${topic}. This is an important topic for your HVAC business.`;
       }
     }
 
@@ -113,7 +105,7 @@ serve(async (req) => {
 
     if (!heygenResponse.ok) {
       const errorText = await heygenResponse.text();
-      console.error("HeyGen API error:", heygenResponse.status, errorText);
+      console.error("[heygen-video] API error:", heygenResponse.status, errorText);
       throw new Error(`HeyGen API error: ${heygenResponse.status}`);
     }
 
@@ -133,10 +125,10 @@ serve(async (req) => {
       .single();
 
     if (saveError) {
-      console.error("Error saving content:", saveError);
+      console.error("[heygen-video] Error saving content:", saveError);
     }
 
-    console.log(`Generated HeyGen video for: ${topic}`);
+    console.log(`[heygen-video] Generated for: ${topic}`);
 
     return new Response(JSON.stringify({ 
       video_id: heygenData.data?.video_id,
@@ -148,7 +140,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error("HeyGen video error:", error);
+    console.error("[heygen-video] error:", error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" }

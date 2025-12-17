@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { aiChat, parseAIError } from "../_shared/ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,7 +15,6 @@ serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error("Missing Supabase configuration");
@@ -160,38 +160,25 @@ serve(async (req) => {
       brief.recommendedActions.push("Lead flow is down - review marketing campaigns");
     }
 
-    // Generate natural language summary using AI if key is available
+    // Generate natural language summary using AI
     let summary = "";
-    if (LOVABLE_API_KEY) {
-      try {
-        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
+    try {
+      const result = await aiChat({
+        messages: [
+          {
+            role: "system",
+            content: "You are a concise CEO assistant. Generate a brief, natural morning summary in 3-4 sentences based on the data. Be direct and action-oriented. Use markdown for emphasis.",
           },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              {
-                role: "system",
-                content: "You are a concise CEO assistant. Generate a brief, natural morning summary in 3-4 sentences based on the data. Be direct and action-oriented. Use markdown for emphasis.",
-              },
-              {
-                role: "user",
-                content: `Generate morning brief summary from: ${JSON.stringify(brief.snapshot)}. Pending: ${brief.pendingApprovals.count}. Hot leads: ${hotLeads.length}. AI ran ${brief.aiActivity.total} tasks.`,
-              },
-            ],
-          }),
-        });
-
-        if (aiResponse.ok) {
-          const aiData = await aiResponse.json();
-          summary = aiData.choices?.[0]?.message?.content || "";
-        }
-      } catch (error) {
-        console.error("AI summary generation failed:", error);
-      }
+          {
+            role: "user",
+            content: `Generate morning brief summary from: ${JSON.stringify(brief.snapshot)}. Pending: ${brief.pendingApprovals.count}. Hot leads: ${hotLeads.length}. AI ran ${brief.aiActivity.total} tasks.`,
+          },
+        ],
+        purpose: "daily_brief",
+      });
+      summary = result.text;
+    } catch (error) {
+      console.error("[daily-brief] AI summary error:", parseAIError(error));
     }
 
     // Fallback summary if AI fails
@@ -201,13 +188,13 @@ serve(async (req) => {
 
     brief.summary = summary;
 
-    console.log("Daily brief generated:", JSON.stringify(brief).slice(0, 500));
+    console.log("[daily-brief] generated successfully");
 
     return new Response(JSON.stringify(brief), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("Daily brief error:", error);
+    console.error("[daily-brief] error:", error);
     return new Response(
       JSON.stringify({ 
         error: error instanceof Error ? error.message : "Unknown error" 

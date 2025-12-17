@@ -1,6 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { aiChat } from "../_shared/ai.ts";
+import { aiVision } from "../_shared/ai.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,11 +29,6 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Build the image content for the API
-    const imageContent = image_base64 
-      ? { type: 'image_url', image_url: { url: `data:image/png;base64,${image_base64}` } }
-      : { type: 'image_url', image_url: { url: image_url } };
 
     // Build system prompt based on action
     let systemPrompt = '';
@@ -107,16 +102,16 @@ Provide actionable brand guidelines.`;
       userPrompt = `${userPrompt}\n\nAdditional context: ${context}`;
     }
 
-    console.log(`Vision analysis request: action=${action}`);
+    console.log(`[vision-analyzer] action=${action} has_url=${!!image_url} has_base64=${!!image_base64}`);
 
-    // Note: Vision analysis requires multimodal support - using direct call for image content
-    // The aiChat helper doesn't currently support multimodal messages
-    const result = await aiChat({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `${userPrompt}\n\n[Image analysis requested - please analyze the image at: ${image_url || 'base64 encoded image'}]` }
-      ],
+    // Use real multimodal vision analysis
+    const result = await aiVision({
+      system: systemPrompt,
+      prompt: userPrompt,
+      image_url: image_url,
+      image_base64: image_base64,
       max_tokens: 2000,
+      purpose: 'vision_analysis',
     });
 
     const analysis = result.text;
@@ -125,14 +120,14 @@ Provide actionable brand guidelines.`;
       throw new Error('No analysis returned from AI');
     }
 
-    console.log(`Vision analysis completed: action=${action}, length=${analysis.length}`);
+    console.log(`[vision-analyzer] complete action=${action} response_length=${analysis.length}`);
 
     return new Response(
       JSON.stringify({
         success: true,
         action,
         analysis,
-        model: 'gemini-2.0-flash',
+        model: result.model,
         provider: result.provider,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -140,7 +135,7 @@ Provide actionable brand guidelines.`;
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Vision analysis failed';
-    console.error('Vision analyzer error:', error);
+    console.error('[vision-analyzer] error:', error);
     return new Response(
       JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

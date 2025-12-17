@@ -1,17 +1,24 @@
 /**
- * AI Provider Abstraction Layer - GEMINI ONLY
+ * AI Provider Abstraction Layer - GEMINI DEFAULT with Premium Routing
  * 
  * Environment Variables:
  * - GEMINI_API_KEY: Key for Google Gemini API (required)
+ * - AI_PROVIDER: Default provider (default: "gemini")
+ * - AI_MODEL_DEFAULT: Default model (default: "gemini-2.0-flash")
+ * - AI_PROVIDER_PREMIUM: Premium provider for escalated calls (optional)
+ * - AI_MODEL_PREMIUM: Premium model (optional)
+ * - AI_PREMIUM_ACTIONS: CSV of purposes that escalate to premium (optional)
  * 
  * Features:
- * - aiChat: Text chat completion
- * - aiVision: Multimodal vision analysis
+ * - aiChat: Text chat completion with purpose-based routing
+ * - aiVision: Real multimodal vision analysis
+ * - aiImage: Image generation (returns error on free tier)
  * - Quota-safe: Retry with backoff, structured error codes
- * - Simple in-memory caching for identical requests
+ * - In-memory caching for identical requests
+ * - Structured logging: provider, model, purpose, latency_ms
  */
 
-export type AIProvider = "gemini";
+export type AIProvider = "gemini" | "openai" | "anthropic";
 
 export interface AIMessage {
   role: "system" | "user" | "assistant";
@@ -21,6 +28,8 @@ export interface AIMessage {
 export interface AIChatOptions {
   messages: AIMessage[];
   model?: string;
+  provider?: AIProvider;
+  purpose?: string;
   temperature?: number;
   max_tokens?: number;
   tools?: any[];
@@ -34,26 +43,83 @@ export interface AIVisionOptions {
   image_base64?: string;
   mime_type?: string;
   max_tokens?: number;
+  purpose?: string;
+}
+
+export interface AIImageOptions {
+  prompt: string;
+  style?: string;
+  size?: string;
 }
 
 export interface AIChatResponse {
   text: string;
   raw: any;
   provider: AIProvider;
+  model: string;
 }
 
 export interface AIError {
-  code: "QUOTA_EXCEEDED" | "RATE_LIMITED" | "API_ERROR" | "CONFIG_ERROR";
+  code: "QUOTA_EXCEEDED" | "RATE_LIMITED" | "API_ERROR" | "CONFIG_ERROR" | "IMAGE_NOT_AVAILABLE";
   message: string;
+  provider?: string;
+  model?: string;
   retryAfter?: number;
 }
 
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+const DEFAULT_PROVIDER: AIProvider = "gemini";
 const DEFAULT_MODEL = "gemini-2.0-flash";
 
 // Simple in-memory cache (60s TTL)
 const responseCache = new Map<string, { response: AIChatResponse; expires: number }>();
 const CACHE_TTL_MS = 60000;
+
+// Rate limiting (simple in-memory)
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60000;
+const RATE_LIMIT_MAX = 30;
+
+/**
+ * Get configuration from environment
+ */
+function getConfig() {
+  const provider = (Deno.env.get("AI_PROVIDER") || DEFAULT_PROVIDER) as AIProvider;
+  const model = Deno.env.get("AI_MODEL_DEFAULT") || DEFAULT_MODEL;
+  const premiumProvider = Deno.env.get("AI_PROVIDER_PREMIUM") as AIProvider | undefined;
+  const premiumModel = Deno.env.get("AI_MODEL_PREMIUM");
+  const premiumActions = (Deno.env.get("AI_PREMIUM_ACTIONS") || "").split(",").filter(Boolean);
+  
+  return { provider, model, premiumProvider, premiumModel, premiumActions };
+}
+
+/**
+ * Check if purpose should use premium tier
+ */
+function shouldUsePremium(purpose: string | undefined, config: ReturnType<typeof getConfig>): boolean {
+  if (!purpose || !config.premiumProvider || !config.premiumModel) return false;
+  return config.premiumActions.includes(purpose);
+}
+
+/**
+ * Simple rate limiter - returns true if allowed
+ */
+function checkRateLimit(key: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+  
+  if (!entry || entry.resetAt < now) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return false;
+  }
+  
+  entry.count++;
+  return true;
+}
 
 /**
  * Masks an API key for safe logging
@@ -93,12 +159,10 @@ function checkCache(key: string): AIChatResponse | null {
  * Store response in cache
  */
 function setCache(key: string, response: AIChatResponse): void {
-  // Clean old entries
   const now = Date.now();
   for (const [k, v] of responseCache.entries()) {
     if (v.expires < now) responseCache.delete(k);
   }
-  // Limit cache size
   if (responseCache.size > 100) {
     const firstKey = responseCache.keys().next().value;
     if (firstKey) responseCache.delete(firstKey);
@@ -107,10 +171,11 @@ function setCache(key: string, response: AIChatResponse): void {
 }
 
 /**
- * Sleep helper for retry backoff
+ * Sleep helper for retry backoff with jitter
  */
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  const jitter = Math.random() * 500;
+  return new Promise(resolve => setTimeout(resolve, ms + jitter));
 }
 
 /**
@@ -126,7 +191,7 @@ async function callGeminiWithRetry(
   if (!apiKey || apiKey.length === 0) {
     return {
       data: null,
-      error: { code: "CONFIG_ERROR", message: "GEMINI_API_KEY is not configured" }
+      error: { code: "CONFIG_ERROR", message: "GEMINI_API_KEY is not configured", provider: "gemini", model }
     };
   }
 
@@ -134,25 +199,27 @@ async function callGeminiWithRetry(
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      const startTime = Date.now();
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
+      const latencyMs = Date.now() - startTime;
 
       if (response.ok) {
         const data = await response.json();
+        console.log(`[ai] success provider=gemini model=${model} latency_ms=${latencyMs}`);
         return { data };
       }
 
       const errorText = await response.text();
       
-      // Handle quota/rate limit errors
       if (response.status === 429) {
-        const retryAfter = Math.pow(2, attempt + 1) * 1000; // Exponential backoff
+        const retryAfter = Math.pow(2, attempt + 1) * 1000;
         
         if (attempt < maxRetries) {
-          console.log(`[ai] Rate limited, retry ${attempt + 1}/${maxRetries} after ${retryAfter}ms`);
+          console.log(`[ai] rate_limited provider=gemini retry=${attempt + 1}/${maxRetries} wait_ms=${retryAfter}`);
           await sleep(retryAfter);
           continue;
         }
@@ -162,23 +229,27 @@ async function callGeminiWithRetry(
           error: { 
             code: "QUOTA_EXCEEDED", 
             message: "API quota exceeded. Please try again later.",
+            provider: "gemini",
+            model,
             retryAfter: 60
           }
         };
       }
 
-      // Other errors - don't retry
-      console.error("[ai] Gemini API error:", {
+      console.error("[ai] error provider=gemini", {
         status: response.status,
         key_masked: maskKey(apiKey),
         error: errorText.slice(0, 200),
+        latency_ms: latencyMs,
       });
       
       return {
         data: null,
         error: { 
           code: "API_ERROR", 
-          message: `Gemini error: ${response.status}`
+          message: `Gemini error: ${response.status}`,
+          provider: "gemini",
+          model
         }
       };
       
@@ -189,28 +260,56 @@ async function callGeminiWithRetry(
       }
       return {
         data: null,
-        error: { code: "API_ERROR", message: "Network error connecting to Gemini" }
+        error: { code: "API_ERROR", message: "Network error connecting to Gemini", provider: "gemini", model }
       };
     }
   }
   
-  return { data: null, error: { code: "API_ERROR", message: "Max retries exceeded" } };
+  return { data: null, error: { code: "API_ERROR", message: "Max retries exceeded", provider: "gemini", model } };
 }
 
 /**
- * Main AI chat function - Gemini only with caching and retry
+ * Main AI chat function with purpose-based routing
  */
 export async function aiChat(options: AIChatOptions): Promise<AIChatResponse> {
-  const model = options.model || DEFAULT_MODEL;
+  const config = getConfig();
+  const startTime = Date.now();
   
-  console.log("[ai] provider=gemini, model=" + model);
+  // Determine provider and model based on purpose
+  let provider = options.provider || config.provider;
+  let model = options.model || config.model;
+  
+  if (shouldUsePremium(options.purpose, config)) {
+    provider = config.premiumProvider!;
+    model = config.premiumModel!;
+    console.log(`[ai] premium_routing purpose=${options.purpose} provider=${provider} model=${model}`);
+  }
+  
+  console.log(`[ai] request provider=${provider} model=${model} purpose=${options.purpose || 'default'}`);
 
-  // Check cache first
+  // Rate limit check
+  if (!checkRateLimit(`aiChat_${provider}`)) {
+    throw new Error(JSON.stringify({ 
+      code: "RATE_LIMITED", 
+      message: "Rate limit exceeded. Please slow down.",
+      provider,
+      model 
+    }));
+  }
+
+  // Check cache
   const cacheKey = generateCacheKey(options.messages, model);
   const cached = checkCache(cacheKey);
   if (cached) {
-    console.log("[ai] Cache hit");
+    console.log(`[ai] cache_hit provider=${provider} model=${model}`);
     return cached;
+  }
+
+  // Currently only Gemini is implemented - others can be added later
+  if (provider !== "gemini") {
+    console.log(`[ai] fallback provider=${provider} -> gemini (not implemented)`);
+    provider = "gemini";
+    model = config.model;
   }
 
   // Convert messages to Gemini format
@@ -250,6 +349,9 @@ export async function aiChat(options: AIChatOptions): Promise<AIChatResponse> {
   }
 
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const latencyMs = Date.now() - startTime;
+  
+  console.log(`[ai] complete provider=${provider} model=${model} purpose=${options.purpose || 'default'} latency_ms=${latencyMs}`);
 
   // Wrap tool responses in OpenAI-compatible format
   let responseData = data;
@@ -261,7 +363,7 @@ export async function aiChat(options: AIChatOptions): Promise<AIChatResponse> {
       if (jsonText.endsWith("```")) jsonText = jsonText.slice(0, -3);
       jsonText = jsonText.trim();
       
-      JSON.parse(jsonText); // Validate
+      JSON.parse(jsonText);
       
       responseData = {
         choices: [{
@@ -280,39 +382,55 @@ export async function aiChat(options: AIChatOptions): Promise<AIChatResponse> {
     }
   }
 
-  const response: AIChatResponse = { text, raw: responseData, provider: "gemini" };
-  
-  // Cache the response
+  const response: AIChatResponse = { text, raw: responseData, provider, model };
   setCache(cacheKey, response);
   
   return response;
 }
 
 /**
- * Vision analysis - supports URL or base64 images
+ * Vision analysis - REAL multimodal with image support
  */
 export async function aiVision(options: AIVisionOptions): Promise<AIChatResponse> {
-  const model = "gemini-2.0-flash"; // Vision-capable model
+  const model = "gemini-2.0-flash";
+  const startTime = Date.now();
   
-  console.log("[ai] provider=gemini (vision), model=" + model);
+  console.log(`[ai] vision_request provider=gemini model=${model} purpose=${options.purpose || 'vision'}`);
 
-  // Build parts array
+  // Rate limit check
+  if (!checkRateLimit("aiVision_gemini")) {
+    throw new Error(JSON.stringify({ 
+      code: "RATE_LIMITED", 
+      message: "Rate limit exceeded for vision.",
+      provider: "gemini",
+      model 
+    }));
+  }
+
+  // Build parts array for multimodal
   const parts: any[] = [];
   
-  // Add text prompt
+  // Add text prompt first
   parts.push({ text: options.prompt });
   
   // Add image
   if (options.image_base64) {
+    // Clean base64 if it has data URL prefix
+    let cleanBase64 = options.image_base64;
+    if (cleanBase64.includes(',')) {
+      cleanBase64 = cleanBase64.split(',')[1];
+    }
+    
     parts.push({
       inlineData: {
         mimeType: options.mime_type || "image/png",
-        data: options.image_base64.replace(/^data:image\/\w+;base64,/, ""),
+        data: cleanBase64,
       }
     });
   } else if (options.image_url) {
     // Fetch image and convert to base64
     try {
+      console.log(`[ai] fetching_image url=${options.image_url.substring(0, 50)}...`);
       const imageResponse = await fetch(options.image_url);
       if (!imageResponse.ok) {
         throw new Error(`Failed to fetch image: ${imageResponse.status}`);
@@ -328,9 +446,11 @@ export async function aiVision(options: AIVisionOptions): Promise<AIChatResponse
         }
       });
     } catch (fetchErr) {
-      console.error("[ai] Failed to fetch image URL:", fetchErr);
+      console.error("[ai] image_fetch_error:", fetchErr);
       throw new Error("Failed to fetch image from URL");
     }
+  } else {
+    throw new Error("Either image_url or image_base64 is required for vision");
   }
 
   const requestBody: any = {
@@ -352,22 +472,43 @@ export async function aiVision(options: AIVisionOptions): Promise<AIChatResponse
   }
 
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const latencyMs = Date.now() - startTime;
   
-  return { text, raw: data, provider: "gemini" };
+  console.log(`[ai] vision_complete provider=gemini model=${model} latency_ms=${latencyMs} response_length=${text.length}`);
+  
+  return { text, raw: data, provider: "gemini", model };
+}
+
+/**
+ * Image generation - returns controlled error on free tier
+ */
+export async function aiImage(options: AIImageOptions): Promise<AIChatResponse> {
+  console.log(`[ai] image_request prompt="${options.prompt.substring(0, 50)}..."`);
+  
+  // Image generation not reliably available on Gemini free tier
+  const error: AIError = {
+    code: "IMAGE_NOT_AVAILABLE",
+    message: "Image generation requires premium tier. Contact support to enable.",
+    provider: "gemini",
+    model: "gemini-2.0-flash-image"
+  };
+  
+  throw new Error(JSON.stringify(error));
 }
 
 /**
  * Streaming chat - returns async iterator
  */
 export async function* aiChatStream(options: AIChatOptions): AsyncGenerator<string, void, unknown> {
-  const model = options.model || DEFAULT_MODEL;
+  const config = getConfig();
+  const model = options.model || config.model;
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not configured");
+    throw new Error(JSON.stringify({ code: "CONFIG_ERROR", message: "GEMINI_API_KEY is not configured" }));
   }
   
-  console.log("[ai] provider=gemini (streaming), model=" + model);
+  console.log(`[ai] stream_request provider=gemini model=${model} purpose=${options.purpose || 'default'}`);
 
   const systemMessage = options.messages.find(m => m.role === "system")?.content || "";
   const conversationMessages = options.messages.filter(m => m.role !== "system");
@@ -400,7 +541,7 @@ export async function* aiChatStream(options: AIChatOptions): AsyncGenerator<stri
   if (!response.ok) {
     const errorText = await response.text();
     if (response.status === 429) {
-      throw new Error(JSON.stringify({ code: "QUOTA_EXCEEDED", message: "API quota exceeded" }));
+      throw new Error(JSON.stringify({ code: "QUOTA_EXCEEDED", message: "API quota exceeded", provider: "gemini", model }));
     }
     throw new Error(`Gemini streaming error: ${response.status}`);
   }
@@ -431,6 +572,8 @@ export async function* aiChatStream(options: AIChatOptions): AsyncGenerator<stri
       }
     }
   }
+  
+  console.log(`[ai] stream_complete provider=gemini model=${model}`);
 }
 
 /**
