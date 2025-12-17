@@ -6,10 +6,13 @@
  * - Trigger onboarding conversation in CEO chat
  * - Parse agent responses for completion signals
  * - Update database when onboarding completes
- * - Notify parent when status changes
+ * - Notify parent via callback when status changes
+ * 
+ * CRITICAL: completeOnboarding is ONLY called here in processAgentResponse.
+ * Parent components should NOT call completeOnboarding separately.
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -26,9 +29,13 @@ interface UseOnboardingOrchestratorReturn {
   totalSteps: number;
   isComplete: boolean;
   isLoading: boolean;
-  startOnboarding: () => string; // Returns the system prompt to send
+  startOnboarding: () => string;
   processAgentResponse: (response: string) => void;
-  completeOnboarding: (data: OnboardingData) => Promise<void>;
+  onCompletionCallback?: () => void;
+}
+
+interface UseOnboardingOrchestratorOptions {
+  onComplete?: () => void;
 }
 
 const ONBOARDING_SYSTEM_PROMPT = `You are helping a new user set up their AI CEO Command Center. Have a friendly, conversational exchange to gather their business information.
@@ -46,7 +53,9 @@ When you have all the information, include this exact tag in your response:
 
 Be warm, encouraging, and keep responses brief.`;
 
-export function useOnboardingOrchestrator(): UseOnboardingOrchestratorReturn {
+export function useOnboardingOrchestrator(
+  options?: UseOnboardingOrchestratorOptions
+): UseOnboardingOrchestratorReturn {
   const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
@@ -59,30 +68,9 @@ export function useOnboardingOrchestrator(): UseOnboardingOrchestratorReturn {
     return ONBOARDING_SYSTEM_PROMPT;
   }, []);
 
-  const processAgentResponse = useCallback((response: string) => {
-    // Look for completion tag
-    const completionMatch = response.match(/\[ONBOARDING_COMPLETE:(.*?)\]/);
-    
-    if (completionMatch) {
-      try {
-        const data = JSON.parse(completionMatch[1]) as OnboardingData;
-        completeOnboarding(data);
-        return;
-      } catch (e) {
-        console.error("Failed to parse onboarding data:", e);
-      }
-    }
-
-    // Track progress based on content
-    if (response.toLowerCase().includes("industry")) {
-      setCurrentStep(Math.max(currentStep, 2));
-    } else if (response.toLowerCase().includes("challenge") || response.toLowerCase().includes("goal")) {
-      setCurrentStep(Math.max(currentStep, 3));
-    }
-  }, [currentStep]);
-
-  const completeOnboarding = useCallback(async (data: OnboardingData) => {
-    if (!user) return;
+  // Internal function - only called from processAgentResponse
+  const completeOnboardingInternal = useCallback(async (data: OnboardingData) => {
+    if (!user || isLoading || isComplete) return;
     
     setIsLoading(true);
     
@@ -123,19 +111,45 @@ export function useOnboardingOrchestrator(): UseOnboardingOrchestratorReturn {
         }
       }
 
+      // Update local state - NO RELOAD
       setIsComplete(true);
       setCurrentStep(totalSteps);
       toast.success("Setup complete! Your Command Center is ready.");
       
-      // Force a page refresh to update all state
-      window.location.reload();
+      // Call the completion callback so parent can react
+      options?.onComplete?.();
     } catch (error) {
       console.error("Error completing onboarding:", error);
       toast.error("Failed to save setup. Please try again.");
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, isLoading, isComplete, options]);
+
+  const processAgentResponse = useCallback((response: string) => {
+    // Prevent double processing if already complete
+    if (isComplete) return;
+
+    // Look for completion tag - THIS IS THE ONLY PLACE THAT TRIGGERS COMPLETION
+    const completionMatch = response.match(/\[ONBOARDING_COMPLETE:(.*?)\]/);
+    
+    if (completionMatch) {
+      try {
+        const data = JSON.parse(completionMatch[1]) as OnboardingData;
+        completeOnboardingInternal(data);
+        return;
+      } catch (e) {
+        console.error("Failed to parse onboarding data:", e);
+      }
+    }
+
+    // Track progress based on content
+    if (response.toLowerCase().includes("industry")) {
+      setCurrentStep(prev => Math.max(prev, 2));
+    } else if (response.toLowerCase().includes("challenge") || response.toLowerCase().includes("goal")) {
+      setCurrentStep(prev => Math.max(prev, 3));
+    }
+  }, [isComplete, completeOnboardingInternal]);
 
   return {
     currentStep,
@@ -144,7 +158,6 @@ export function useOnboardingOrchestrator(): UseOnboardingOrchestratorReturn {
     isLoading,
     startOnboarding,
     processAgentResponse,
-    completeOnboarding,
   };
 }
 

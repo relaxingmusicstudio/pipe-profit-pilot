@@ -1,13 +1,12 @@
 import { useState, useEffect } from "react";
-import AdminLayout from "@/components/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { 
@@ -17,16 +16,14 @@ import {
   AlertTriangle,
   Plus,
   GripVertical,
-  Phone,
-  Mail,
-  Calendar,
   Brain,
   Sparkles
 } from "lucide-react";
 import { RevenueForecast } from "@/components/pipeline/RevenueForecast";
 import { RevenueIntelligence } from "@/components/pipeline/RevenueIntelligence";
-import { PageChatHeader } from "@/components/PageChatHeader";
 import { StatCardWithTooltip } from "@/components/StatCardWithTooltip";
+import { PageShell } from "@/components/PageShell";
+import { AssistantStrip } from "@/components/AssistantStrip";
 
 interface Deal {
   id: string;
@@ -52,6 +49,13 @@ const STAGES = [
   { id: 'negotiation', label: 'Negotiation', probability: 75, color: 'bg-orange-500' },
   { id: 'closed_won', label: 'Closed Won', probability: 100, color: 'bg-green-500' },
   { id: 'closed_lost', label: 'Closed Lost', probability: 0, color: 'bg-red-500' },
+];
+
+const PIPELINE_PROMPTS = [
+  { label: "Deals to focus on", prompt: "Which deals should I focus on today?" },
+  { label: "Close more deals", prompt: "How can I close more deals this month?" },
+  { label: "Pipeline health", prompt: "How healthy is my pipeline?" },
+  { label: "Stalled deals", prompt: "Which deals have been stalled the longest?" },
 ];
 
 export default function AdminPipeline() {
@@ -181,85 +185,88 @@ export default function AdminPipeline() {
   const weightedPipelineValue = deals.reduce((sum, d) => sum + (d.value * d.probability / 100), 0);
   const avgDealSize = deals.length > 0 ? totalPipelineValue / deals.length : 0;
 
-  return (
-    <AdminLayout title="Deal Pipeline" subtitle="Drag deals between stages to update status">
-      <div className="space-y-6">
-        <PageChatHeader
-          pageContext="Deal Pipeline page - managing sales opportunities and forecasting revenue"
-          placeholder="Ask about your deals, sales tips, or forecasting..."
-          quickActions={[
-            { label: "Deals to focus on", prompt: "Which deals should I focus on today?" },
-            { label: "Close more deals", prompt: "How can I close more deals this month?" },
-            { label: "Pipeline health", prompt: "How healthy is my pipeline?" },
-          ]}
-        />
-
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <Dialog open={showAddDeal} onOpenChange={setShowAddDeal}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                Add Deal
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add New Deal</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label>Deal Name</Label>
-                  <Input 
-                    value={newDeal.name} 
-                    onChange={e => setNewDeal({...newDeal, name: e.target.value})}
-                    placeholder="e.g., HVAC System Replacement"
-                  />
-                </div>
-                <div>
-                  <Label>Company</Label>
-                  <Input 
-                    value={newDeal.company} 
-                    onChange={e => setNewDeal({...newDeal, company: e.target.value})}
-                    placeholder="e.g., Smith Residence"
-                  />
-                </div>
-                <div>
-                  <Label>Value ($)</Label>
-                  <Input 
-                    type="number"
-                    value={newDeal.value} 
-                    onChange={e => setNewDeal({...newDeal, value: e.target.value})}
-                    placeholder="e.g., 15000"
-                  />
-                </div>
-                <div>
-                  <Label>Stage</Label>
-                  <Select value={newDeal.stage} onValueChange={v => setNewDeal({...newDeal, stage: v})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STAGES.filter(s => !s.id.startsWith('closed')).map(stage => (
-                        <SelectItem key={stage.id} value={stage.id}>{stage.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Next Action</Label>
-                  <Textarea 
-                    value={newDeal.next_action} 
-                    onChange={e => setNewDeal({...newDeal, next_action: e.target.value})}
-                    placeholder="e.g., Schedule site visit"
-                  />
-                </div>
-                <Button onClick={handleAddDeal} className="w-full">Add Deal</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+  const addDealButton = (
+    <Dialog open={showAddDeal} onOpenChange={setShowAddDeal}>
+      <DialogTrigger asChild>
+        <Button className="gap-2">
+          <Plus className="h-4 w-4" />
+          Add Deal
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add New Deal</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label>Deal Name</Label>
+            <Input 
+              value={newDeal.name} 
+              onChange={e => setNewDeal({...newDeal, name: e.target.value})}
+              placeholder="e.g., HVAC System Replacement"
+            />
+          </div>
+          <div>
+            <Label>Company</Label>
+            <Input 
+              value={newDeal.company} 
+              onChange={e => setNewDeal({...newDeal, company: e.target.value})}
+              placeholder="e.g., Smith Residence"
+            />
+          </div>
+          <div>
+            <Label>Value ($)</Label>
+            <Input 
+              type="number"
+              value={newDeal.value} 
+              onChange={e => setNewDeal({...newDeal, value: e.target.value})}
+              placeholder="e.g., 15000"
+            />
+          </div>
+          <div>
+            <Label>Stage</Label>
+            <Select value={newDeal.stage} onValueChange={v => setNewDeal({...newDeal, stage: v})}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STAGES.filter(s => !s.id.startsWith('closed')).map(stage => (
+                  <SelectItem key={stage.id} value={stage.id}>{stage.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Next Action</Label>
+            <Textarea 
+              value={newDeal.next_action} 
+              onChange={e => setNewDeal({...newDeal, next_action: e.target.value})}
+              placeholder="e.g., Schedule site visit"
+            />
+          </div>
+          <Button onClick={handleAddDeal} className="w-full">Add Deal</Button>
         </div>
+      </DialogContent>
+    </Dialog>
+  );
 
+  const assistantStrip = (
+    <AssistantStrip
+      pageContext="Deal Pipeline - managing sales opportunities and forecasting revenue"
+      quickPrompts={PIPELINE_PROMPTS}
+      placeholder="Ask about your deals or get sales tips..."
+    />
+  );
+
+  return (
+    <PageShell
+      title="Deal Pipeline"
+      subtitle="Drag deals between stages to update status"
+      primaryAction={addDealButton}
+      assistantStrip={assistantStrip}
+      fullBleed
+    >
+      <div className="space-y-6 p-4 md:p-6">
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <StatCardWithTooltip
@@ -394,6 +401,6 @@ export default function AdminPipeline() {
         {/* Revenue Intelligence */}
         <RevenueIntelligence deals={deals} />
       </div>
-    </AdminLayout>
+    </PageShell>
   );
 }
