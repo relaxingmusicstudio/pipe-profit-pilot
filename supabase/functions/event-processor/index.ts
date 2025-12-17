@@ -90,32 +90,29 @@ function logProcessor(level: 'INFO' | 'WARN' | 'ERROR', type: string, data: Reco
 // EVENT RELEASE (for timeout/limit safety)
 // ============================================
 
-async function releaseEvents(eventIds: string[], runId: string, consumer: string): Promise<number> {
+async function releaseEvents(eventIds: string[], runId: string, consumer: string, eventType: string): Promise<number> {
   if (eventIds.length === 0) return 0;
   
   const supabase = getSupabaseAdmin();
   
   // Release events back to 'pending' without incrementing attempts
-  const { error, count } = await supabase
+  const { error } = await supabase
     .from('system_events')
-    .update({ 
-      status: 'pending',
-      // Don't touch attempts - we didn't actually process them
-    })
+    .update({ status: 'pending' })
     .in('id', eventIds)
-    .eq('status', 'processing'); // Only release if still processing
+    .eq('status', 'processing');
   
   if (error) {
     logProcessor('ERROR', 'release_failed', { run_id: runId, error: error.message, event_count: eventIds.length });
     return 0;
   }
   
-  // Log each released event
+  // Log each released event with correct event_type
   for (const eventId of eventIds) {
     logEvent({
       run_id: runId,
       consumer,
-      event_type: 'unknown', // We don't have this info readily available
+      event_type: eventType,
       event_id: eventId,
       outcome: 'released',
     });
@@ -175,8 +172,6 @@ async function processLeadCreatedForColdAgent(event: SystemEvent): Promise<void>
     if (payload.utm_source) queuePayload.utm_source = payload.utm_source;
     if (payload.utm_medium) queuePayload.utm_medium = payload.utm_medium;
     if (payload.utm_campaign) queuePayload.utm_campaign = payload.utm_campaign;
-    if (payload.utm_term) queuePayload.utm_term = payload.utm_term;
-    if (payload.utm_content) queuePayload.utm_content = payload.utm_content;
     if (payload.consent_status) queuePayload.consent_status = payload.consent_status;
     if (payload.lead_score !== undefined) queuePayload.lead_score = payload.lead_score;
     
@@ -318,9 +313,9 @@ async function processEvents(
     return result;
   }
 
-  // Track claimed vs handled for safe release
+  // Track claimed vs handled for safe release (Set for O(1) lookup)
   const claimedEventIds = events.map(e => e.id);
-  const handledEventIds: string[] = [];
+  const handledEventIds = new Set<string>();
 
   logProcessor('INFO', 'events_claimed', { run_id: runId, consumer: consumerName, count: events.length });
 
@@ -338,7 +333,7 @@ async function processEvents(
         consumer: consumerName,
         elapsed_ms: elapsedSoFar,
         max_ms: maxMs,
-        events_remaining: claimedEventIds.length - handledEventIds.length,
+        events_remaining: claimedEventIds.length - handledEventIds.size,
       });
       break;
     }
@@ -374,14 +369,14 @@ async function processEvents(
             duration_ms: Date.now() - eventStart,
             error: `Unknown consumer: ${consumerName}`,
           });
-          handledEventIds.push(event.id);
+          handledEventIds.add(event.id);
           continue;
       }
 
       // Mark as processed
       await markProcessed(event.id, consumerName);
       result.processed++;
-      handledEventIds.push(event.id);
+      handledEventIds.add(event.id);
 
       logEvent({
         run_id: runId,
@@ -400,7 +395,7 @@ async function processEvents(
       const failResult = await markFailed(event.id, consumerName, errorMessage);
       result.failed++;
       result.errors.push(`${event.id}: ${errorMessage}`);
-      handledEventIds.push(event.id);
+      handledEventIds.add(event.id);
 
       logEvent({
         run_id: runId,
@@ -422,9 +417,9 @@ async function processEvents(
 
   // RELEASE unhandled events on early stop (timeout or limit_reached)
   if (result.stopped_reason === 'timeout' || result.stopped_reason === 'limit_reached') {
-    const unhandledEventIds = claimedEventIds.filter(id => !handledEventIds.includes(id));
+    const unhandledEventIds = claimedEventIds.filter(id => !handledEventIds.has(id));
     if (unhandledEventIds.length > 0) {
-      result.released = await releaseEvents(unhandledEventIds, runId, consumerName);
+      result.released = await releaseEvents(unhandledEventIds, runId, consumerName, eventType);
     }
   }
 
