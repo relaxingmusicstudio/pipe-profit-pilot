@@ -1,8 +1,15 @@
 /**
- * Event Processor - System Contract v1.1.1 Phase 2D
+ * Event Processor - System Contract v1.2.0 (Hardened)
  * 
- * Processes canonical events from the event bus.
+ * Processes canonical events from the event bus with budget controls.
  * Currently implements: cold_agent_enroller consumer for lead_created events.
+ * 
+ * Query Params:
+ *   - consumer: Consumer name (default: cold_agent_enroller)
+ *   - event_type: Event type to process (default: lead_created)
+ *   - limit: Max events to process (default: 10)
+ *   - max_ms: Max runtime in milliseconds (default: 8000)
+ *   - run_id: Optional run identifier (generated if missing)
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -20,6 +27,49 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// ============================================
+// TYPES
+// ============================================
+
+type StopReason = 'limit_reached' | 'timeout' | 'no_events' | 'claim_error' | 'completed';
+
+interface ProcessorResult {
+  success: boolean;
+  run_id: string;
+  consumer: string;
+  event_type: string;
+  processed: number;
+  failed: number;
+  stopped_reason: StopReason;
+  elapsed_ms: number;
+  errors: string[];
+}
+
+interface EventLog {
+  run_id: string;
+  consumer: string;
+  event_type: string;
+  event_id: string;
+  status_before: string;
+  outcome: 'processed' | 'failed' | 'skipped';
+  attempts: number;
+  duration_ms: number;
+  error?: string;
+}
+
+// ============================================
+// STRUCTURED LOGGING
+// ============================================
+
+function logEvent(log: EventLog): void {
+  console.log(JSON.stringify({
+    level: 'INFO',
+    type: 'event_processed',
+    ...log,
+    timestamp: new Date().toISOString(),
+  }));
+}
 
 // ============================================
 // CONSUMER: COLD AGENT ENROLLER
@@ -45,15 +95,11 @@ async function processLeadCreatedForColdAgent(event: SystemEvent): Promise<void>
     tenant_id?: string;
   };
 
-  console.log(`[ColdAgentEnroller] Processing lead_created: ${leadId}`);
-
   // 1. Check autopilot mode (fail-safe to MANUAL if missing/error)
   const autopilotMode = await getAutopilotMode(event.tenant_id ?? undefined);
-  console.log(`[ColdAgentEnroller] Autopilot mode: ${autopilotMode}`);
 
   if (autopilotMode === 'MANUAL') {
     // Queue for CEO approval instead of auto-enrolling
-    console.log(`[ColdAgentEnroller] MANUAL mode - queuing for CEO approval`);
     
     // IDEMPOTENCY GUARD: Check if pending/approved approval already exists for this lead
     const { data: existingAction } = await supabase
@@ -65,8 +111,7 @@ async function processLeadCreatedForColdAgent(event: SystemEvent): Promise<void>
       .maybeSingle();
     
     if (existingAction) {
-      console.log(`[ColdAgentEnroller] Approval already exists for lead ${leadId} (id=${existingAction.id}, status=${existingAction.status}) - skipping duplicate`);
-      return;
+      return; // Already exists, skip silently
     }
     
     const queuePayload: Record<string, unknown> = {
@@ -90,7 +135,7 @@ async function processLeadCreatedForColdAgent(event: SystemEvent): Promise<void>
       target_id: leadId,
       tenant_id: event.tenant_id,
       payload: queuePayload,
-      priority: 'normal',  // Must match constraint: low, normal, high, critical
+      priority: 'normal',
       status: 'pending',
       source: 'event_processor',
       claude_reasoning: `New lead ${leadId} requires CEO approval for cold sequence enrollment (MANUAL mode).`,
@@ -98,16 +143,11 @@ async function processLeadCreatedForColdAgent(event: SystemEvent): Promise<void>
     
     // DB-LEVEL IDEMPOTENCY: Handle unique constraint violation (23505) as success
     if (queueError) {
-      // Check for unique violation from partial index
       if (queueError.code === '23505') {
-        console.log(`[ColdAgentEnroller] DB constraint caught duplicate for lead ${leadId} - treating as success`);
-        return;
+        return; // Duplicate, treat as success
       }
-      console.error(`[ColdAgentEnroller] Failed to queue CEO action:`, queueError);
       throw new Error(`Failed to queue CEO action: ${queueError.message}`);
     }
-    
-    console.log(`[ColdAgentEnroller] Queued CEO approval for lead ${leadId}`);
     return;
   }
 
@@ -125,8 +165,6 @@ async function processLeadCreatedForColdAgent(event: SystemEvent): Promise<void>
     .maybeSingle();
 
   if (seqError || !sequence) {
-    console.log(`[ColdAgentEnroller] No active cold sequence found, recording skip`);
-    
     // Record the skipped enrollment in action_history
     await supabase.from('action_history').insert({
       action_table: 'sequence_enrollments',
@@ -154,8 +192,7 @@ async function processLeadCreatedForColdAgent(event: SystemEvent): Promise<void>
     .maybeSingle();
 
   if (existingEnrollment) {
-    console.log(`[ColdAgentEnroller] Lead ${leadId} already enrolled in sequence ${sequence.id}`);
-    return;
+    return; // Already enrolled
   }
 
   // 5. Create enrollment
@@ -172,11 +209,8 @@ async function processLeadCreatedForColdAgent(event: SystemEvent): Promise<void>
     .single();
 
   if (enrollError) {
-    console.error(`[ColdAgentEnroller] Enrollment error:`, enrollError);
     throw new Error(`Failed to enroll lead: ${enrollError.message}`);
   }
-
-  console.log(`[ColdAgentEnroller] Enrolled lead ${leadId} in sequence ${sequence.name} (${sequence.id})`);
 
   // 6. Audit the enrollment in action_history
   await supabase.from('action_history').insert({
@@ -213,19 +247,28 @@ async function processLeadCreatedForColdAgent(event: SystemEvent): Promise<void>
 }
 
 // ============================================
-// MAIN PROCESSOR
+// MAIN PROCESSOR WITH BUDGET CONTROLS
 // ============================================
 
 async function processEvents(
+  runId: string,
   consumerName: string, 
   eventType: string,
-  limit: number
-): Promise<{
-  processed: number;
-  failed: number;
-  errors: string[];
-}> {
-  const results = { processed: 0, failed: 0, errors: [] as string[] };
+  limit: number,
+  maxMs: number,
+  startTime: number
+): Promise<ProcessorResult> {
+  const result: ProcessorResult = {
+    success: true,
+    run_id: runId,
+    consumer: consumerName,
+    event_type: eventType,
+    processed: 0,
+    failed: 0,
+    stopped_reason: 'completed',
+    elapsed_ms: 0,
+    errors: [],
+  };
 
   // Claim events atomically using claim_system_events RPC
   const { events, error: claimError } = await claimEvents({
@@ -235,20 +278,49 @@ async function processEvents(
   });
 
   if (claimError) {
-    console.error(`[EventProcessor] Claim error:`, claimError);
-    results.errors.push(`claim: ${claimError}`);
-    return results;
+    result.success = false;
+    result.stopped_reason = 'claim_error';
+    result.errors.push(`claim: ${claimError}`);
+    result.elapsed_ms = Date.now() - startTime;
+    return result;
   }
 
   if (events.length === 0) {
-    console.log(`[EventProcessor] No pending events for ${consumerName}:${eventType}`);
-    return results;
+    result.stopped_reason = 'no_events';
+    result.elapsed_ms = Date.now() - startTime;
+    return result;
   }
 
-  console.log(`[EventProcessor] Processing ${events.length} events`);
-
-  // Process each claimed event
+  // Process each claimed event with budget checks
   for (const event of events) {
+    const eventStart = Date.now();
+    const statusBefore = event.status;
+
+    // CHECK TIMEOUT BUDGET before processing
+    const elapsedSoFar = Date.now() - startTime;
+    if (elapsedSoFar >= maxMs) {
+      result.stopped_reason = 'timeout';
+      result.elapsed_ms = elapsedSoFar;
+      // Note: We already claimed these events, they'll stay in 'processing' 
+      // and be picked up by next run after claim_system_events resets them
+      console.log(JSON.stringify({
+        level: 'WARN',
+        type: 'processor_timeout',
+        run_id: runId,
+        consumer: consumerName,
+        elapsed_ms: elapsedSoFar,
+        max_ms: maxMs,
+        events_remaining: events.length - (result.processed + result.failed),
+      }));
+      break;
+    }
+
+    // CHECK LIMIT BUDGET
+    if (result.processed + result.failed >= limit) {
+      result.stopped_reason = 'limit_reached';
+      break;
+    }
+
     try {
       // Route to appropriate handler based on consumer
       switch (consumerName) {
@@ -256,30 +328,76 @@ async function processEvents(
           await processLeadCreatedForColdAgent(event);
           break;
         default:
-          console.log(`[EventProcessor] Unknown consumer: ${consumerName}, skipping`);
+          // Unknown consumer - skip but don't fail
+          logEvent({
+            run_id: runId,
+            consumer: consumerName,
+            event_type: eventType,
+            event_id: event.id,
+            status_before: statusBefore,
+            outcome: 'skipped',
+            attempts: event.attempts,
+            duration_ms: Date.now() - eventStart,
+            error: `Unknown consumer: ${consumerName}`,
+          });
+          continue;
       }
 
       // Mark as processed via mark_event_processed RPC
       await markProcessed(event.id, consumerName);
-      results.processed++;
-      console.log(`[EventProcessor] Processed event ${event.id}`);
+      result.processed++;
+
+      logEvent({
+        run_id: runId,
+        consumer: consumerName,
+        event_type: eventType,
+        event_id: event.id,
+        status_before: statusBefore,
+        outcome: 'processed',
+        attempts: event.attempts,
+        duration_ms: Date.now() - eventStart,
+      });
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[EventProcessor] Error processing event ${event.id}:`, errorMessage);
       
       // Mark failed via mark_event_failed RPC (handles backoff + dead-lettering)
-      const result = await markFailed(event.id, consumerName, errorMessage);
-      results.failed++;
-      results.errors.push(`${event.id}: ${errorMessage}`);
+      const failResult = await markFailed(event.id, consumerName, errorMessage);
+      result.failed++;
+      result.errors.push(`${event.id}: ${errorMessage}`);
+
+      logEvent({
+        run_id: runId,
+        consumer: consumerName,
+        event_type: eventType,
+        event_id: event.id,
+        status_before: statusBefore,
+        outcome: 'failed',
+        attempts: event.attempts,
+        duration_ms: Date.now() - eventStart,
+        error: errorMessage,
+      });
       
-      if (result.deadLettered) {
-        console.log(`[EventProcessor] Event ${event.id} moved to dead-letter queue`);
+      if (failResult.deadLettered) {
+        console.log(JSON.stringify({
+          level: 'WARN',
+          type: 'event_dead_lettered',
+          run_id: runId,
+          event_id: event.id,
+          consumer: consumerName,
+        }));
       }
     }
   }
 
-  return results;
+  result.elapsed_ms = Date.now() - startTime;
+  
+  // If we processed everything without hitting limits
+  if (result.stopped_reason === 'completed' && result.processed + result.failed === events.length) {
+    result.stopped_reason = 'completed';
+  }
+
+  return result;
 }
 
 // ============================================
@@ -291,36 +409,67 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+
   try {
     const url = new URL(req.url);
+    
+    // Parse query params with defaults
     const consumer = url.searchParams.get('consumer') ?? 'cold_agent_enroller';
     const eventType = url.searchParams.get('event_type') ?? 'lead_created';
-    const limit = parseInt(url.searchParams.get('limit') ?? '10', 10);
+    const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '10', 10), 100); // Cap at 100
+    const maxMs = Math.min(parseInt(url.searchParams.get('max_ms') ?? '8000', 10), 55000); // Cap at 55s (edge function limit)
+    const runId = url.searchParams.get('run_id') ?? crypto.randomUUID();
 
-    console.log(`[EventProcessor] Starting processor for ${consumer}:${eventType} (limit=${limit})`);
+    console.log(JSON.stringify({
+      level: 'INFO',
+      type: 'processor_start',
+      run_id: runId,
+      consumer,
+      event_type: eventType,
+      limit,
+      max_ms: maxMs,
+    }));
 
-    const results = await processEvents(consumer, eventType, limit);
+    const result = await processEvents(runId, consumer, eventType, limit, maxMs, startTime);
 
-    console.log(`[EventProcessor] Complete - Processed: ${results.processed}, Failed: ${results.failed}`);
+    console.log(JSON.stringify({
+      level: 'INFO',
+      type: 'processor_complete',
+      run_id: runId,
+      consumer,
+      processed: result.processed,
+      failed: result.failed,
+      stopped_reason: result.stopped_reason,
+      elapsed_ms: result.elapsed_ms,
+    }));
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        consumer,
-        event_type: eventType,
-        ...results,
-      }),
+      JSON.stringify(result),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
 
   } catch (error) {
-    console.error("[EventProcessor] Fatal error:", error);
+    const runId = crypto.randomUUID();
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    
+    console.log(JSON.stringify({
+      level: 'ERROR',
+      type: 'processor_fatal',
+      run_id: runId,
+      error: errorMessage,
+      elapsed_ms: Date.now() - startTime,
+    }));
+
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        run_id: runId,
+        error: errorMessage,
+        stopped_reason: 'error',
+        elapsed_ms: Date.now() - startTime,
       }),
       {
         status: 500,
