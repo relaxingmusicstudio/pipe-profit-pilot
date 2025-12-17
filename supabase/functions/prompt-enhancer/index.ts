@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { aiChat } from "../_shared/ai.ts";
+import { aiChat, parseAIError } from "../_shared/ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,24 +23,18 @@ serve(async (req) => {
 
     // Handle message enhancement action for AI personalization
     if (action === "enhance_message") {
-      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-      
-      if (!LOVABLE_API_KEY) {
-        return new Response(JSON.stringify({ 
-          enhanced: template,
-          success: false
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        });
-      }
-
       const toneGuide = {
         professional: "formal, business-like, respectful, confident",
         casual: "friendly, conversational, approachable, warm",
         urgent: "time-sensitive, compelling, action-oriented, direct"
       };
 
-      const systemPrompt = `You are an expert sales copywriter for HVAC companies. Enhance the following outreach template to be more compelling and personalized.
+      try {
+        const result = await aiChat({
+          messages: [
+            { 
+              role: "system", 
+              content: `You are an expert sales copywriter for HVAC companies. Enhance the following outreach template to be more compelling and personalized.
 
 TONE: ${toneGuide[tone as keyof typeof toneGuide] || toneGuide.professional}
 
@@ -51,25 +45,22 @@ RULES:
 4. Keep it concise (under 150 words)
 5. For HVAC: emphasize 24/7 availability, quick response times, and revenue recovery
 
-Return ONLY the enhanced message, nothing else.`;
-
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: systemPrompt },
+Return ONLY the enhanced message, nothing else.`
+            },
             { role: "user", content: template }
-          ]
-        })
-      });
+          ],
+          purpose: "message_enhancement",
+        });
 
-      if (!response.ok) {
-        console.error("AI enhancement failed");
+        return new Response(JSON.stringify({ 
+          enhanced: result.text,
+          success: true,
+          tone
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      } catch (error) {
+        console.error("[prompt-enhancer] AI enhancement failed:", parseAIError(error));
         return new Response(JSON.stringify({ 
           enhanced: template + "\n\nP.S. I'd love to help you capture more after-hours revenue!",
           success: true
@@ -77,23 +68,9 @@ Return ONLY the enhanced message, nothing else.`;
           headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
-
-      const aiData = await response.json();
-      const enhanced = aiData.choices?.[0]?.message?.content || template;
-
-      console.log(`Enhanced message with tone: ${tone}`);
-
-      return new Response(JSON.stringify({ 
-        enhanced,
-        success: true,
-        tone
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
     }
 
     // Original prompt enhancement logic for content
-    // Fetch winner patterns for this content type
     const { data: winnerPatterns } = await supabase
       .from("content_patterns")
       .select("*")
@@ -102,7 +79,6 @@ Return ONLY the enhanced message, nothing else.`;
       .order("confidence_score", { ascending: false })
       .limit(10);
 
-    // Fetch loser patterns to avoid
     const { data: loserPatterns } = await supabase
       .from("content_patterns")
       .select("*")
@@ -111,7 +87,6 @@ Return ONLY the enhanced message, nothing else.`;
       .order("confidence_score", { ascending: false })
       .limit(5);
 
-    // Fetch inspiration patterns
     const { data: inspirations } = await supabase
       .from("scraped_inspiration")
       .select("*")
@@ -119,7 +94,6 @@ Return ONLY the enhanced message, nothing else.`;
       .order("viral_score", { ascending: false })
       .limit(5);
 
-    // Build enhancement context
     const winnerContext = winnerPatterns?.map(p => 
       `✅ DO: ${p.pattern_description} (${Math.round((p.confidence_score || 0) * 100)}% confidence)`
     ).join("\n") || "No winner patterns yet.";
@@ -132,21 +106,12 @@ Return ONLY the enhanced message, nothing else.`;
       `📌 Viral example: ${i.title} - ${i.description?.substring(0, 100)}`
     ).join("\n") || "";
 
-    // Use AI to enhance the prompt
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    
-    if (!LOVABLE_API_KEY) {
-      // Return original prompt if no AI available
-      return new Response(JSON.stringify({ 
-        enhanced_prompt: prompt,
-        original_prompt: prompt,
-        patterns_applied: 0
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
-    }
-
-    const systemPrompt = `You are a content optimization expert for HVAC marketing. Your job is to enhance content prompts using proven patterns.
+    try {
+      const result = await aiChat({
+        messages: [
+          { 
+            role: "system", 
+            content: `You are a content optimization expert for HVAC marketing. Your job is to enhance content prompts using proven patterns.
 
 LEARNED WINNER PATTERNS (use these):
 ${winnerContext}
@@ -161,25 +126,25 @@ RULES:
 2. Apply winner patterns where they fit naturally
 3. Actively avoid loser patterns
 4. Make it specific to HVAC industry when relevant
-5. Return ONLY the enhanced prompt, no explanation`;
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
+5. Return ONLY the enhanced prompt, no explanation`
+          },
           { role: "user", content: `Enhance this ${content_type} prompt for ${platform || "general"} platform:\n\n${prompt}` }
-        ]
-      })
-    });
+        ],
+        purpose: "prompt_enhancement",
+      });
 
-    if (!response.ok) {
-      console.error("AI enhancement failed, returning original prompt");
+      console.log(`[prompt-enhancer] Enhanced for ${content_type}: applied ${winnerPatterns?.length || 0} winner patterns`);
+
+      return new Response(JSON.stringify({ 
+        enhanced_prompt: result.text,
+        original_prompt: prompt,
+        patterns_applied: winnerPatterns?.length || 0,
+        patterns_avoided: loserPatterns?.length || 0
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    } catch (error) {
+      console.error("[prompt-enhancer] AI enhancement failed:", parseAIError(error));
       return new Response(JSON.stringify({ 
         enhanced_prompt: prompt,
         original_prompt: prompt,
@@ -189,22 +154,8 @@ RULES:
       });
     }
 
-    const aiData = await response.json();
-    const enhancedPrompt = aiData.choices?.[0]?.message?.content || prompt;
-
-    console.log(`Enhanced prompt for ${content_type}: applied ${winnerPatterns?.length || 0} winner patterns`);
-
-    return new Response(JSON.stringify({ 
-      enhanced_prompt: enhancedPrompt,
-      original_prompt: prompt,
-      patterns_applied: winnerPatterns?.length || 0,
-      patterns_avoided: loserPatterns?.length || 0
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
-
   } catch (error: unknown) {
-    console.error("Prompt enhancer error:", error);
+    console.error("[prompt-enhancer] error:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,

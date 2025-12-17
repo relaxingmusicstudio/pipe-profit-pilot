@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { aiChat } from "../_shared/ai.ts";
+import { aiChat, parseAIError } from "../_shared/ai.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,7 +16,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
     
     const supabase = createClient(supabaseUrl, supabaseKey);
     const { recipientEmail, generateOnly } = await req.json();
@@ -68,26 +67,18 @@ serve(async (req) => {
     // At-risk clients
     const atRiskClients = clients.filter(c => (c.health_score || 100) < 50 && c.status === "active");
 
-    // Generate AI summary
+    // Generate AI summary using shared helper
     let aiSummary = "";
-    if (lovableApiKey) {
-      try {
-        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${lovableApiKey}`,
-            "Content-Type": "application/json",
+    try {
+      const result = await aiChat({
+        messages: [
+          {
+            role: "system",
+            content: "You are a CEO briefing assistant. Write a concise 2-3 sentence executive summary of the business metrics provided. Focus on what's most important for a CEO to know today. Be direct and actionable."
           },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              {
-                role: "system",
-                content: "You are a CEO briefing assistant. Write a concise 2-3 sentence executive summary of the business metrics provided. Focus on what's most important for a CEO to know today. Be direct and actionable."
-              },
-              {
-                role: "user",
-                content: `Yesterday's metrics:
+          {
+            role: "user",
+            content: `Yesterday's metrics:
 - Visitors: ${todayVisitors}
 - New Leads: ${todayLeads}
 - Revenue: $${todayRevenue.toLocaleString()}
@@ -97,18 +88,13 @@ serve(async (req) => {
 - Active Clients: ${activeClients}
 - At-Risk Clients: ${atRiskClients.length}
 ${anomalies.length > 0 ? `Anomalies: ${anomalies.join(", ")}` : ""}`
-              }
-            ],
-          }),
-        });
-
-        if (aiResponse.ok) {
-          const aiData = await aiResponse.json();
-          aiSummary = aiData.choices?.[0]?.message?.content || "";
-        }
-      } catch (e) {
-        console.error("AI summary error:", e);
-      }
+          }
+        ],
+        purpose: "ceo_daily_brief",
+      });
+      aiSummary = result.text;
+    } catch (e) {
+      console.error("[ceo-daily-briefing] AI summary error:", parseAIError(e));
     }
 
     const briefingData: {
@@ -153,7 +139,7 @@ ${anomalies.length > 0 ? `Anomalies: ${anomalies.join(", ")}` : ""}`
 
     // Run pattern detector to refresh user patterns
     try {
-      console.log("[CEO Briefing] Running pattern detector...");
+      console.log("[ceo-daily-briefing] Running pattern detector...");
       const patternResponse = await fetch(`${supabaseUrl}/functions/v1/pattern-detector`, {
         method: 'POST',
         headers: {
@@ -165,11 +151,11 @@ ${anomalies.length > 0 ? `Anomalies: ${anomalies.join(", ")}` : ""}`
       
       if (patternResponse.ok) {
         const patternData = await patternResponse.json();
-        console.log(`[CEO Briefing] Pattern detector found ${patternData.patternsCount || 0} patterns`);
+        console.log(`[ceo-daily-briefing] Pattern detector found ${patternData.patternsCount || 0} patterns`);
         briefingData.patterns = patternData.patterns || [];
       }
     } catch (patternError) {
-      console.error("[CEO Briefing] Pattern detector error:", patternError);
+      console.error("[ceo-daily-briefing] Pattern detector error:", patternError);
     }
 
     // Fetch active user patterns for proactive suggestions
@@ -190,7 +176,7 @@ ${anomalies.length > 0 ? `Anomalies: ${anomalies.join(", ")}` : ""}`
         }));
       }
     } catch (patternsError) {
-      console.error("[CEO Briefing] Error fetching patterns:", patternsError);
+      console.error("[ceo-daily-briefing] Error fetching patterns:", patternsError);
     }
 
     if (generateOnly) {
@@ -299,11 +285,11 @@ ${anomalies.length > 0 ? `Anomalies: ${anomalies.join(", ")}` : ""}`
 
       if (!emailResponse.ok) {
         const err = await emailResponse.text();
-        console.error("Email send error:", err);
+        console.error("[ceo-daily-briefing] Email send error:", err);
         throw new Error("Failed to send email");
       }
 
-      console.log("Daily briefing email sent to:", recipientEmail);
+      console.log("[ceo-daily-briefing] Email sent to:", recipientEmail);
     }
 
     return new Response(JSON.stringify({ success: true, briefing: briefingData }), {
@@ -312,7 +298,7 @@ ${anomalies.length > 0 ? `Anomalies: ${anomalies.join(", ")}` : ""}`
 
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("CEO briefing error:", message);
+    console.error("[ceo-daily-briefing] error:", message);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
