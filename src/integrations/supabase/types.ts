@@ -8661,7 +8661,7 @@ export type Database = {
       }
     }
     Functions: {
-      activate_tenant: { Args: { p_tenant_id: string }; Returns: boolean }
+      activate_tenant: { Args: { p_tenant_id: string }; Returns: undefined }
       check_feature_access: {
         Args: { check_tenant_id: string; feature: string }
         Returns: boolean
