@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/integrations/supabase/client";
+import { PageShell } from "@/components/PageShell";
+import { AssistantStrip } from "@/components/AssistantStrip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -307,8 +308,26 @@ const AdminCRM = () => {
     return Array.from(sources) as string[];
   }, [leads]);
 
+  const CRM_PROMPTS = [
+    { label: "Hot leads", prompt: "Which leads should I call first today?" },
+    { label: "Follow-up tips", prompt: "How can I improve my follow-up process?" },
+    { label: "Conversion help", prompt: "How can I convert more leads?" },
+  ];
+
+  const assistantStrip = (
+    <AssistantStrip
+      pageContext="CRM - Lead management and sales tracking"
+      quickPrompts={CRM_PROMPTS}
+      placeholder="Ask about your leads or get sales tips..."
+    />
+  );
+
   return (
-    <AdminLayout title="CRM" subtitle="Spreadsheet-style lead management with drill-down profiles">
+    <PageShell
+      title="CRM"
+      subtitle="Lead management with drill-down profiles"
+      assistantStrip={assistantStrip}
+    >
       {/* Enhanced CRM with Tabs */}
       <Tabs defaultValue="leads" className="space-y-6">
         <TabsList>
@@ -813,7 +832,7 @@ const AdminCRM = () => {
         customerEmail={selectedLead?.email || undefined}
         customerPhone={selectedLead?.phone || undefined}
       />
-    </AdminLayout>
+    </PageShell>
   );
 };
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import AdminLayout from "@/components/AdminLayout";
+import { PageShell } from "@/components/PageShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -290,7 +290,7 @@ export default function AdminBilling() {
   const totalAmount = items.reduce((sum, item) => sum + item.total, 0);
 
   return (
-    <AdminLayout title="Billing" subtitle="Manage client invoices, usage, and AI-powered billing">
+    <PageShell title="Billing" subtitle="Manage client invoices, usage, and AI-powered billing">
       <Tabs defaultValue="invoices" className="space-y-6">
         <TabsList>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
@@ -718,6 +718,6 @@ export default function AdminBilling() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AdminLayout>
+    </PageShell>
   );
 }

@@ -5,6 +5,11 @@
  * - Shows onboarding card if onboarding_complete=false
  * - Shows intelligence grid if onboarding complete
  * - CEO chat is always visible at bottom
+ * 
+ * ONBOARDING FLOW:
+ * - processAgentResponse in useOnboardingOrchestrator handles ALL completion logic
+ * - This component ONLY passes the response to processAgentResponse
+ * - NO separate completeOnboarding call from this component
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -49,16 +54,26 @@ When you have all the information, include this exact tag in your response:
 Be warm, encouraging, and keep responses brief. Start by warmly greeting them and asking for their business name.`;
 
 export default function CEOHome() {
-  const { isOnboardingComplete, isLoading: onboardingLoading } = useOnboardingStatus();
-  const { currentStep, totalSteps, processAgentResponse, completeOnboarding } = useOnboardingOrchestrator();
+  const { isOnboardingComplete, isLoading: onboardingLoading, refetch: refetchOnboardingStatus } = useOnboardingStatus();
+  
+  // Use the orchestrator with a completion callback to refetch status
+  const { currentStep, totalSteps, processAgentResponse, isComplete: orchestratorComplete } = useOnboardingOrchestrator({
+    onComplete: () => {
+      // When orchestrator marks complete, refetch the onboarding status
+      refetchOnboardingStatus();
+    }
+  });
   
   const [metrics, setMetrics] = useState<GridMetrics | null>(null);
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(true);
   const [showOnboardingChat, setShowOnboardingChat] = useState(false);
   const [onboardingMessage, setOnboardingMessage] = useState<string | undefined>();
 
+  // Determine if we should show dashboard based on either hook or orchestrator
+  const shouldShowDashboard = isOnboardingComplete || orchestratorComplete;
+
   useEffect(() => {
-    if (isOnboardingComplete) {
+    if (shouldShowDashboard) {
       fetchMetrics();
       
       // Set up realtime subscriptions for key tables
@@ -74,7 +89,7 @@ export default function CEOHome() {
         supabase.removeChannel(channel);
       };
     }
-  }, [isOnboardingComplete]);
+  }, [shouldShowDashboard]);
 
   const fetchMetrics = async () => {
     try {
@@ -173,23 +188,13 @@ export default function CEOHome() {
     setOnboardingMessage("Hi! I'm excited to get started with my new AI CEO Command Center.");
   }, []);
 
+  // CRITICAL: Only pass response to processAgentResponse - NO separate completeOnboarding call
   const handleAgentResponse = useCallback((response: string) => {
     processAgentResponse(response);
-    
-    // Check for completion tag
-    const completionMatch = response.match(/\[ONBOARDING_COMPLETE:(.*?)\]/);
-    if (completionMatch) {
-      try {
-        const data = JSON.parse(completionMatch[1]);
-        completeOnboarding(data);
-      } catch (e) {
-        console.error("Failed to parse onboarding data:", e);
-      }
-    }
-  }, [processAgentResponse, completeOnboarding]);
+  }, [processAgentResponse]);
 
-  const isLoading = onboardingLoading || (isOnboardingComplete && isLoadingMetrics);
-  const showOnboarding = !isOnboardingComplete && !onboardingLoading;
+  const isLoading = onboardingLoading || (shouldShowDashboard && isLoadingMetrics);
+  const showOnboarding = !shouldShowDashboard && !onboardingLoading;
 
   return (
     <>
@@ -215,7 +220,7 @@ export default function CEOHome() {
             )}
 
             {/* Normal Dashboard Content */}
-            {isOnboardingComplete && (
+            {shouldShowDashboard && (
               <>
                 <div className="mb-4">
                   <h1 className="text-lg font-semibold text-foreground">Good {getTimeOfDay()}</h1>

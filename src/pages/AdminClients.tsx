@@ -44,8 +44,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import AdminLayout from "@/components/AdminLayout";
-import { PageChatHeader } from "@/components/PageChatHeader";
+import { PageShell } from "@/components/PageShell";
+import { AssistantStrip } from "@/components/AssistantStrip";
 import { StatCardWithTooltip } from "@/components/StatCardWithTooltip";
 
 interface Client {
@@ -300,17 +300,26 @@ const AdminClients = () => {
     { api_calls: 0, conversations: 0, appointments: 0, leads: 0, logins: 0 }
   );
 
+  const CLIENTS_PROMPTS = [
+    { label: "At-risk clients", prompt: "Which clients are at risk of leaving?" },
+    { label: "Upsell opportunities", prompt: "Which clients are good for upselling?" },
+    { label: "Retention tips", prompt: "How can I improve client retention?" },
+  ];
+
+  const assistantStrip = (
+    <AssistantStrip
+      pageContext="Client management - viewing and managing paying customers"
+      quickPrompts={CLIENTS_PROMPTS}
+      placeholder="Ask about your clients or get retention tips..."
+    />
+  );
+
   return (
-    <AdminLayout title="Clients" subtitle="Manage your current customers">
-      <PageChatHeader
-        pageContext="Client management page - viewing and managing paying customers"
-        placeholder="Ask about your clients, retention tips, or how to improve client health..."
-        quickActions={[
-          { label: "At-risk clients", prompt: "Which clients are at risk of leaving?" },
-          { label: "Upsell opportunities", prompt: "Which clients are good candidates for upselling?" },
-          { label: "Retention tips", prompt: "How can I improve client retention?" },
-        ]}
-      />
+    <PageShell
+      title="Clients"
+      subtitle="Manage your current customers"
+      assistantStrip={assistantStrip}
+    >
 
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -831,7 +840,7 @@ const AdminClients = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AdminLayout>
+    </PageShell>
   );
 };
 
