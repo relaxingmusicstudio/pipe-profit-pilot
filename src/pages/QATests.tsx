@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CheckCircle2, XCircle, Loader2, Copy, Play, AlertTriangle, Clock, RefreshCw, Wifi } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Copy, Play, AlertTriangle, Clock, RefreshCw, Wifi, Download, Network } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -50,6 +50,20 @@ interface CeoAlertsSchemaInfo {
   isEmpty: boolean;
 }
 
+interface NetworkProbeDiagnostic {
+  url_used: string;
+  request_headers: Record<string, string>;
+  response_status: number | string;
+  response_headers: {
+    "access-control-allow-origin": string | null;
+    "access-control-allow-headers": string | null;
+    "access-control-allow-methods": string | null;
+  };
+  response_body: unknown;
+  error_message: string | null;
+  testedAt: string;
+}
+
 export default function QATests() {
   const { user } = useAuth();
   const { role, isOwner, isAdmin, isLoading: roleLoading } = useUserRole();
@@ -76,6 +90,8 @@ export default function QATests() {
     testedAt: null,
   });
   const [schemaInfo, setSchemaInfo] = useState<CeoAlertsSchemaInfo | null>(null);
+  const [networkProbeLoading, setNetworkProbeLoading] = useState(false);
+  const [networkProbeDiagnostic, setNetworkProbeDiagnostic] = useState<NetworkProbeDiagnostic | null>(null);
 
   // Detect schema on mount
   useEffect(() => {
@@ -1641,16 +1657,107 @@ export default function QATests() {
     }
   };
 
+  // Network Probe for lead-normalize
+  const runNetworkProbe = async () => {
+    setNetworkProbeLoading(true);
+    setNetworkProbeDiagnostic(null);
+    
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lead-normalize`;
+    const diagnostic: NetworkProbeDiagnostic = {
+      url_used: url,
+      request_headers: {},
+      response_status: "N/A",
+      response_headers: {
+        "access-control-allow-origin": null,
+        "access-control-allow-headers": null,
+        "access-control-allow-methods": null,
+      },
+      response_body: null,
+      error_message: null,
+      testedAt: new Date().toISOString(),
+    };
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (accessToken) {
+        headers["Authorization"] = `Bearer [REDACTED:${accessToken.slice(-8)}]`;
+      }
+      diagnostic.request_headers = headers;
+
+      const actualHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (accessToken) {
+        actualHeaders["Authorization"] = `Bearer ${accessToken}`;
+      }
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: actualHeaders,
+        body: JSON.stringify({
+          tenant_id: tenantIdA || "00000000-0000-0000-0000-000000000000",
+          lead: {
+            email: `probe_${Date.now()}@qatest.local`,
+            phone: "5550000000",
+            source: "qa_network_probe",
+          },
+        }),
+      });
+
+      diagnostic.response_status = response.status;
+      diagnostic.response_headers = {
+        "access-control-allow-origin": response.headers.get("access-control-allow-origin"),
+        "access-control-allow-headers": response.headers.get("access-control-allow-headers"),
+        "access-control-allow-methods": response.headers.get("access-control-allow-methods"),
+      };
+
+      const text = await response.text();
+      try {
+        diagnostic.response_body = JSON.parse(text);
+      } catch {
+        diagnostic.response_body = text;
+      }
+    } catch (err) {
+      diagnostic.error_message = err instanceof Error ? err.message : String(err);
+      diagnostic.response_status = "FETCH_ERROR";
+    }
+
+    setNetworkProbeDiagnostic(diagnostic);
+    setNetworkProbeLoading(false);
+    toast.success("Network probe complete");
+  };
+
   const copyDebugJson = async () => {
     if (!results) return;
     const jsonStr = JSON.stringify(results, null, 2);
     try {
       await navigator.clipboard.writeText(jsonStr);
       toast.success("Debug JSON copied");
+      setShowJsonTextarea(false);
     } catch {
-      toast.error("Clipboard access denied. Use textarea below.");
+      toast.error("Clipboard access denied. Expanding textarea.");
       setShowJsonTextarea(true);
     }
+  };
+
+  const downloadDebugJson = () => {
+    if (!results) return;
+    const jsonStr = JSON.stringify(results, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qa-tests-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success("Debug JSON downloaded");
   };
 
   const getStatusIcon = (status: TestResult["status"]) => {
@@ -1680,14 +1787,141 @@ export default function QATests() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <AlertTriangle className="h-6 w-6" />
-            QA Tests - Tenant Isolation Verification
+            QA Command Center
           </CardTitle>
           <CardDescription>
             Admin-only page to verify tenant isolation. No PII displayed.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Role Detection */}
+          {/* ===== COMMAND BUTTONS - ALWAYS VISIBLE ===== */}
+          <div className="bg-muted/50 border rounded-lg p-4 space-y-3">
+            <div className="text-sm font-medium text-muted-foreground">Command Buttons</div>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={handleAutoFill} disabled={autoFillLoading} variant="outline" size="sm">
+                {autoFillLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                Auto-fill IDs
+              </Button>
+              <Button onClick={runAllTests} disabled={running || !tenantIdA || !tenantIdB} size="sm">
+                {running ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Play className="h-4 w-4 mr-2" />}
+                Run All Tests
+              </Button>
+              <Button variant="outline" onClick={copyDebugJson} disabled={!results} size="sm">
+                <Copy className="h-4 w-4 mr-2" />
+                Copy Debug JSON
+              </Button>
+              <Button variant="outline" onClick={downloadDebugJson} disabled={!results} size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Download Debug JSON
+              </Button>
+              <Button variant="outline" onClick={runNetworkProbe} disabled={networkProbeLoading} size="sm">
+                {networkProbeLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Network className="h-4 w-4 mr-2" />}
+                Network Probe (lead-normalize)
+              </Button>
+            </div>
+          </div>
+
+          {/* ===== LAST RUN SUMMARY ===== */}
+          {results && (
+            <Alert variant={results.summary.failed > 0 || results.summary.errors > 0 ? "destructive" : "default"}>
+              <Clock className="h-4 w-4" />
+              <AlertTitle>Last Run: {new Date(results.timestamp).toLocaleString()}</AlertTitle>
+              <AlertDescription className="flex flex-wrap gap-3 mt-2">
+                <Badge variant="outline">Total: {results.summary.total}</Badge>
+                <Badge variant="default">Passed: {results.summary.passed}</Badge>
+                <Badge variant="destructive">Failed: {results.summary.failed}</Badge>
+                <Badge variant="secondary">Errors: {results.summary.errors}</Badge>
+                <Badge variant="outline">Skipped: {results.summary.skipped}</Badge>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* ===== CLIPBOARD FALLBACK TEXTAREA ===== */}
+          {showJsonTextarea && results && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-destructive">Clipboard unavailable - copy from textarea below:</div>
+              <Textarea 
+                className="font-mono text-xs h-64" 
+                value={JSON.stringify(results, null, 2)} 
+                readOnly 
+                onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+              />
+            </div>
+          )}
+
+          {/* ===== NETWORK PROBE DIAGNOSTIC ===== */}
+          {networkProbeDiagnostic && (
+            <Alert variant={networkProbeDiagnostic.error_message ? "destructive" : "default"}>
+              <Network className="h-4 w-4" />
+              <AlertTitle>Network Probe Diagnostic</AlertTitle>
+              <AlertDescription className="font-mono text-xs space-y-1 mt-2">
+                <div><strong>Tested At:</strong> {networkProbeDiagnostic.testedAt}</div>
+                <div><strong>URL Used:</strong> {networkProbeDiagnostic.url_used}</div>
+                <div><strong>Request Headers:</strong> {JSON.stringify(networkProbeDiagnostic.request_headers)}</div>
+                <div><strong>Response Status:</strong> {networkProbeDiagnostic.response_status}</div>
+                {networkProbeDiagnostic.error_message && (
+                  <div className="text-destructive"><strong>Fetch Error:</strong> {networkProbeDiagnostic.error_message}</div>
+                )}
+                <div><strong>Response Headers:</strong></div>
+                <div className="pl-4">
+                  <div>access-control-allow-origin: {networkProbeDiagnostic.response_headers["access-control-allow-origin"] ?? "(null)"}</div>
+                  <div>access-control-allow-headers: {networkProbeDiagnostic.response_headers["access-control-allow-headers"] ?? "(null)"}</div>
+                  <div>access-control-allow-methods: {networkProbeDiagnostic.response_headers["access-control-allow-methods"] ?? "(null)"}</div>
+                </div>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-muted-foreground">Response Body</summary>
+                  <pre className="mt-1 p-2 bg-muted rounded overflow-x-auto max-h-48">
+                    {typeof networkProbeDiagnostic.response_body === "string" 
+                      ? networkProbeDiagnostic.response_body 
+                      : JSON.stringify(networkProbeDiagnostic.response_body, null, 2)}
+                  </pre>
+                </details>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <Separator />
+
+          {/* ===== INPUT FIELDS ===== */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Tenant ID A</Label>
+              <Input value={tenantIdA} onChange={(e) => setTenantIdA(e.target.value)} className="font-mono text-xs" placeholder="UUID" />
+            </div>
+            <div className="space-y-2">
+              <Label>Tenant ID B</Label>
+              <Input value={tenantIdB} onChange={(e) => setTenantIdB(e.target.value)} className="font-mono text-xs" placeholder="UUID" />
+            </div>
+            <div className="space-y-2">
+              <Label>Alert ID from Tenant B</Label>
+              <Input value={alertIdFromTenantB} onChange={(e) => setAlertIdFromTenantB(e.target.value)} className="font-mono text-xs" placeholder="UUID (optional)" />
+            </div>
+          </div>
+
+          {/* ===== WARNINGS ===== */}
+          {autoFillWarning && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Warning</AlertTitle>
+              <AlertDescription>{autoFillWarning}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* ===== AUTO-FILL STATUS ===== */}
+          {autoFillStatus && (
+            <Alert variant="default">
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertTitle>Auto-fill Status</AlertTitle>
+              <AlertDescription className="font-mono text-xs">
+                <div>Tenant A: {autoFillStatus.tenantA}</div>
+                <div>Tenant B: {autoFillStatus.tenantB}</div>
+                <div>Alert ID: {autoFillStatus.alertId || "(none - TEST 3 will SKIP)"}</div>
+                <div>Discriminator: {autoFillStatus.discriminator}</div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* ===== ROLE DETECTION ===== */}
           <Alert variant="default">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Role Detection</AlertTitle>
@@ -1696,7 +1930,7 @@ export default function QATests() {
             </AlertDescription>
           </Alert>
 
-          {/* Connectivity Diagnostic */}
+          {/* ===== CONNECTIVITY DIAGNOSTIC ===== */}
           {connectivity.testedAt && (
             <Alert variant={connectivity.connectivityOk ? "default" : "destructive"}>
               <Wifi className="h-4 w-4" />
@@ -1710,7 +1944,7 @@ export default function QATests() {
             </Alert>
           )}
 
-          {/* Schema Info */}
+          {/* ===== SCHEMA INFO ===== */}
           {schemaInfo && (
             <Alert variant="default">
               <AlertTriangle className="h-4 w-4" />
@@ -1721,106 +1955,31 @@ export default function QATests() {
             </Alert>
           )}
 
-          {autoFillWarning && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Warning</AlertTitle>
-              <AlertDescription>{autoFillWarning}</AlertDescription>
-            </Alert>
-          )}
-
-          {/* Auto-fill Status Display */}
-          {autoFillStatus && (
-            <Alert variant="default">
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertTitle>Auto-fill Status</AlertTitle>
-              <AlertDescription className="font-mono text-xs">
-                <div>Tenant A: {autoFillStatus.tenantA?.slice(0, 8)}...</div>
-                <div>Tenant B: {autoFillStatus.tenantB?.slice(0, 8)}...</div>
-                <div>Alert ID: {autoFillStatus.alertId ? `${autoFillStatus.alertId.slice(0, 8)}...` : "(none)"}</div>
-                <div>Discriminator: {autoFillStatus.discriminator}</div>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <div className="flex gap-2">
-            <Button onClick={handleAutoFill} disabled={autoFillLoading} variant="outline">
-              {autoFillLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-              Auto-fill IDs
-            </Button>
-            <Button onClick={testConnectivity} variant="outline">
-              <Wifi className="h-4 w-4 mr-2" />
-              Test Connectivity
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Tenant ID A</Label>
-              <Input value={tenantIdA} onChange={(e) => setTenantIdA(e.target.value)} className="font-mono text-xs" />
-            </div>
-            <div className="space-y-2">
-              <Label>Tenant ID B</Label>
-              <Input value={tenantIdB} onChange={(e) => setTenantIdB(e.target.value)} className="font-mono text-xs" />
-            </div>
-            <div className="space-y-2">
-              <Label>Alert ID from Tenant B</Label>
-              <Input value={alertIdFromTenantB} onChange={(e) => setAlertIdFromTenantB(e.target.value)} className="font-mono text-xs" />
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="flex gap-2">
-            <Button onClick={runAllTests} disabled={running || !tenantIdA || !tenantIdB}>
-              {running ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Play className="h-4 w-4 mr-2" />}
-              Run All Tests
-            </Button>
-            {results && (
-              <Button variant="outline" onClick={copyDebugJson}>
-                <Copy className="h-4 w-4 mr-2" />
-                Copy Debug JSON
-              </Button>
-            )}
-          </div>
-
-          {showJsonTextarea && results && (
-            <Textarea className="font-mono text-xs h-64" value={JSON.stringify(results, null, 2)} readOnly />
-          )}
-
+          {/* ===== TEST RESULTS ===== */}
           {results && (
-            <>
-              <Alert variant={results.summary.failed > 0 || results.summary.errors > 0 ? "destructive" : "default"}>
-                <AlertTitle>Summary</AlertTitle>
-                <AlertDescription>
-                  Total: {results.summary.total} | Passed: {results.summary.passed} | Failed: {results.summary.failed} | Errors: {results.summary.errors} | Skipped: {results.summary.skipped}
-                </AlertDescription>
-              </Alert>
-
-              <ScrollArea className="h-[500px] border rounded-lg p-4">
-                <div className="space-y-4">
-                  {results.tests.map((test, idx) => (
-                    <div key={idx} className="border rounded-lg p-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(test.status)}
-                          <span className="font-medium">{test.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {getStatusBadge(test.status)}
-                          <span className="text-xs text-muted-foreground">{test.duration_ms}ms</span>
-                        </div>
+            <ScrollArea className="h-[500px] border rounded-lg p-4">
+              <div className="space-y-4">
+                {results.tests.map((test, idx) => (
+                  <div key={idx} className="border rounded-lg p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(test.status)}
+                        <span className="font-medium">{test.name}</span>
                       </div>
-                      {test.error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{test.error}</div>}
-                      <details className="text-xs">
-                        <summary className="cursor-pointer text-muted-foreground">Details</summary>
-                        <pre className="mt-2 p-2 bg-muted rounded overflow-x-auto">{JSON.stringify(test.details, null, 2)}</pre>
-                      </details>
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(test.status)}
+                        <span className="text-xs text-muted-foreground">{test.duration_ms}ms</span>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </>
+                    {test.error && <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">{test.error}</div>}
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground">Details</summary>
+                      <pre className="mt-2 p-2 bg-muted rounded overflow-x-auto">{JSON.stringify(test.details, null, 2)}</pre>
+                    </details>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
           )}
         </CardContent>
       </Card>
