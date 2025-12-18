@@ -114,6 +114,12 @@ export default function QATests() {
     // TEST 10: PG_NET Reconciliation Proof
     tests.push(await runReconciliationProofTest());
 
+    // TEST 11: Lead Normalization
+    tests.push(await runLeadNormalizationTest(tenantIdA));
+
+    // TEST 12: Dedup Proof
+    tests.push(await runDedupProofTest(tenantIdA));
+
     const output: TestOutput = {
       timestamp: new Date().toISOString(),
       tests,
@@ -740,6 +746,299 @@ export default function QATests() {
             : deliveredUnknownLogs.length > 0 && deliveredTrueLogs.length === 0
               ? "Only delivered=unknown logs found. pg_net response table may not be available."
               : "No proven delivery found. Need delivered=true with status_code or delivered_at.",
+        duration_ms: Date.now() - start,
+      };
+    } catch (err) {
+      return {
+        name,
+        status: "error",
+        details: {},
+        error: err instanceof Error ? err.message : String(err),
+        duration_ms: Date.now() - start,
+      };
+    }
+  };
+
+  // TEST 11: Lead Normalization
+  const runLeadNormalizationTest = async (tenantId: string): Promise<TestResult> => {
+    const start = Date.now();
+    const name = "TEST 11 - Lead Normalization";
+    const testNonce = `qa_norm_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      if (!accessToken) {
+        return {
+          name,
+          status: "error",
+          details: { reason: "No auth session" },
+          error: "Must be logged in to run this test",
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      // Call lead-normalize endpoint
+      const testEmail = `test_${testNonce}@qatest.local`;
+      const testPhone = "(555) 123-4567";
+      const testCompany = "QA Test Company";
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lead-normalize`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          lead: {
+            email: testEmail,
+            phone: testPhone,
+            company_name: testCompany,
+            first_name: "QA",
+            last_name: "Test",
+            source: "qa_tests",
+          },
+        }),
+      });
+
+      const responseBody = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        return {
+          name,
+          status: "fail",
+          details: { response_status: response.status, body: responseBody },
+          error: `Normalize returned ${response.status}: ${responseBody.error || "Unknown error"}`,
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      // Verify response structure
+      if (!responseBody.ok || !responseBody.fingerprint || !["created", "deduped"].includes(responseBody.status)) {
+        return {
+          name,
+          status: "fail",
+          details: { response: responseBody },
+          error: "Invalid response structure from lead-normalize",
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      // Verify lead_profile exists in DB
+      const { data: profiles, error: profileError } = await supabase
+        .from("lead_profiles")
+        .select("id, fingerprint, segment, is_primary, tenant_id")
+        .eq("tenant_id", tenantId)
+        .eq("fingerprint", responseBody.fingerprint)
+        .limit(1);
+
+      if (profileError) {
+        return {
+          name,
+          status: "error",
+          details: { db_error: profileError.message },
+          error: profileError.message,
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      const profileExists = profiles && profiles.length > 0;
+
+      return {
+        name,
+        status: profileExists ? "pass" : "fail",
+        details: {
+          normalize_response: responseBody,
+          lead_profile_id: responseBody.lead_profile_id,
+          fingerprint: responseBody.fingerprint,
+          segment: responseBody.segment,
+          normalized: responseBody.normalized,
+          profile_verified_in_db: profileExists,
+        },
+        error: profileExists ? undefined : "lead_profile not found in database after creation",
+        duration_ms: Date.now() - start,
+      };
+    } catch (err) {
+      return {
+        name,
+        status: "error",
+        details: {},
+        error: err instanceof Error ? err.message : String(err),
+        duration_ms: Date.now() - start,
+      };
+    }
+  };
+
+  // TEST 12: Dedup Proof
+  const runDedupProofTest = async (tenantId: string): Promise<TestResult> => {
+    const start = Date.now();
+    const name = "TEST 12 - Dedup Proof";
+    const testNonce = `qa_dedup_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      if (!accessToken) {
+        return {
+          name,
+          status: "error",
+          details: { reason: "No auth session" },
+          error: "Must be logged in to run this test",
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      // Generate unique email for this test run
+      const baseEmail = `dedup_${testNonce}@qatest.local`;
+      const basePhone = "5559876543";
+
+      // First call - should create
+      const firstResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lead-normalize`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          lead: {
+            email: baseEmail,
+            phone: basePhone,
+            source: "qa_dedup_test_1",
+          },
+        }),
+      });
+
+      const firstBody = await firstResponse.json().catch(() => ({}));
+
+      if (!firstResponse.ok || firstBody.status !== "created") {
+        return {
+          name,
+          status: "fail",
+          details: { first_call: firstBody },
+          error: `First call should return status=created, got ${firstBody.status || "error"}`,
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      const fingerprint = firstBody.fingerprint;
+
+      // Second call with same data but different casing/format
+      const secondResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lead-normalize`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          tenant_id: tenantId,
+          lead: {
+            email: baseEmail.toUpperCase(), // Different casing
+            phone: `(555) 987-6543`, // Different format
+            source: "qa_dedup_test_2",
+          },
+        }),
+      });
+
+      const secondBody = await secondResponse.json().catch(() => ({}));
+
+      if (!secondResponse.ok) {
+        return {
+          name,
+          status: "fail",
+          details: { first_call: firstBody, second_call: secondBody },
+          error: `Second call failed: ${secondBody.error || "Unknown error"}`,
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      // Second call should be deduped
+      if (secondBody.status !== "deduped") {
+        return {
+          name,
+          status: "fail",
+          details: { first_call: firstBody, second_call: secondBody },
+          error: `Second call should return status=deduped, got ${secondBody.status}`,
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      // Fingerprints should match
+      if (secondBody.fingerprint !== fingerprint) {
+        return {
+          name,
+          status: "fail",
+          details: { first_fingerprint: fingerprint, second_fingerprint: secondBody.fingerprint },
+          error: "Fingerprints don't match - normalization is inconsistent",
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      // Verify only ONE is_primary=true profile exists for this fingerprint
+      const { data: profiles, error: profileError } = await supabase
+        .from("lead_profiles")
+        .select("id, is_primary")
+        .eq("tenant_id", tenantId)
+        .eq("fingerprint", fingerprint)
+        .eq("is_primary", true);
+
+      if (profileError) {
+        return {
+          name,
+          status: "error",
+          details: { db_error: profileError.message },
+          error: profileError.message,
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      const primaryCount = profiles?.length || 0;
+      if (primaryCount !== 1) {
+        return {
+          name,
+          status: "fail",
+          details: { primary_profiles_found: primaryCount },
+          error: `Expected exactly 1 primary profile, found ${primaryCount}`,
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      // Check audit log for normalization entries
+      const { data: auditLogs, error: auditError } = await supabase
+        .from("platform_audit_log")
+        .select("id, action_type, entity_type, timestamp")
+        .eq("entity_type", "lead_profile")
+        .in("action_type", ["lead_profile_created", "lead_profile_updated", "lead_profile_merged"])
+        .gte("timestamp", new Date(start).toISOString())
+        .order("timestamp", { ascending: false })
+        .limit(10);
+
+      if (auditError) {
+        return {
+          name,
+          status: "error",
+          details: { audit_error: auditError.message },
+          error: auditError.message,
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      const hasAuditEntries = auditLogs && auditLogs.length > 0;
+
+      return {
+        name,
+        status: "pass",
+        details: {
+          first_call: { status: firstBody.status, fingerprint: firstBody.fingerprint },
+          second_call: { status: secondBody.status, fingerprint: secondBody.fingerprint },
+          fingerprints_match: true,
+          primary_profiles_count: primaryCount,
+          audit_log_entries_found: auditLogs?.length || 0,
+          audit_entries: auditLogs?.map(l => ({ id: l.id, action: l.action_type, timestamp: l.timestamp })),
+        },
         duration_ms: Date.now() - start,
       };
     } catch (err) {
