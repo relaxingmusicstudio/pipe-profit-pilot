@@ -5613,6 +5613,87 @@ export type Database = {
           },
         ]
       }
+      lead_profiles: {
+        Row: {
+          company_name: string | null
+          consumer_profile: Json | null
+          created_at: string | null
+          decision_maker: boolean | null
+          enriched_at: string | null
+          enrichment_data: Json | null
+          fingerprint: string
+          id: string
+          industry: string | null
+          is_primary: boolean | null
+          job_title: string | null
+          lead_id: string | null
+          merged_from: string[] | null
+          segment: Database["public"]["Enums"]["lead_segment"] | null
+          temperature:
+            | Database["public"]["Enums"]["lead_temperature_type"]
+            | null
+          tenant_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          company_name?: string | null
+          consumer_profile?: Json | null
+          created_at?: string | null
+          decision_maker?: boolean | null
+          enriched_at?: string | null
+          enrichment_data?: Json | null
+          fingerprint: string
+          id?: string
+          industry?: string | null
+          is_primary?: boolean | null
+          job_title?: string | null
+          lead_id?: string | null
+          merged_from?: string[] | null
+          segment?: Database["public"]["Enums"]["lead_segment"] | null
+          temperature?:
+            | Database["public"]["Enums"]["lead_temperature_type"]
+            | null
+          tenant_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          company_name?: string | null
+          consumer_profile?: Json | null
+          created_at?: string | null
+          decision_maker?: boolean | null
+          enriched_at?: string | null
+          enrichment_data?: Json | null
+          fingerprint?: string
+          id?: string
+          industry?: string | null
+          is_primary?: boolean | null
+          job_title?: string | null
+          lead_id?: string | null
+          merged_from?: string[] | null
+          segment?: Database["public"]["Enums"]["lead_segment"] | null
+          temperature?:
+            | Database["public"]["Enums"]["lead_temperature_type"]
+            | null
+          tenant_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_profiles_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           annual_revenue: string | null
@@ -9584,6 +9665,10 @@ export type Database = {
         }
         Returns: Json
       }
+      compute_lead_fingerprint: {
+        Args: { p_company_name: string; p_email: string; p_phone: string }
+        Returns: string
+      }
       convert_lead: {
         Args: {
           p_converted_at?: string
@@ -9657,6 +9742,8 @@ export type Database = {
         Args: { p_consumer_name: string; p_event_id: string }
         Returns: undefined
       }
+      normalize_email: { Args: { raw_email: string }; Returns: string }
+      normalize_phone: { Args: { raw_phone: string }; Returns: string }
       provision_tenant: {
         Args: {
           p_name: string
@@ -9702,6 +9789,14 @@ export type Database = {
         | "platform_admin"
         | "owner"
         | "client"
+      lead_segment: "b2b" | "b2c" | "unknown"
+      lead_temperature_type:
+        | "ice_cold"
+        | "cold"
+        | "warm"
+        | "hot"
+        | "booked"
+        | "closed"
       tenant_plan: "starter" | "growth" | "scale"
       tenant_status: "draft" | "active" | "suspended"
     }
@@ -9838,6 +9933,15 @@ export const Constants = {
         "platform_admin",
         "owner",
         "client",
+      ],
+      lead_segment: ["b2b", "b2c", "unknown"],
+      lead_temperature_type: [
+        "ice_cold",
+        "cold",
+        "warm",
+        "hot",
+        "booked",
+        "closed",
       ],
       tenant_plan: ["starter", "growth", "scale"],
       tenant_status: ["draft", "active", "suspended"],
