@@ -10,6 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  * - platform_audit_log (recent scheduler activity)
  * 
  * REQUIRES: verify_jwt = true in config.toml
+ * Allows both "admin" and "owner" roles
  */
 
 const corsHeaders = {
@@ -73,7 +74,7 @@ serve(async (req) => {
       return jsonResponse({ error: "Server configuration error" }, 500);
     }
 
-    // Verify user is authenticated and has admin role
+    // Verify user is authenticated and has admin/owner role
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
       auth: { persistSession: false },
@@ -85,22 +86,21 @@ serve(async (req) => {
       return jsonResponse({ error: "Authentication failed" }, 401);
     }
 
-    // Check admin role
+    // Check if user has admin OR owner role
     const { data: roleData, error: roleError } = await userClient
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
-      .eq("role", "admin")
-      .maybeSingle();
+      .in("role", ["admin", "owner"]);
 
     if (roleError) {
       console.error("[admin-scheduler-status] Role check failed", { error: roleError.message });
       return jsonResponse({ error: "Failed to verify permissions" }, 500);
     }
 
-    if (!roleData) {
-      console.warn("[admin-scheduler-status] Non-admin access attempt", { user_id: user.id });
-      return jsonResponse({ error: "Admin access required" }, 403);
+    if (!roleData || roleData.length === 0) {
+      console.warn("[admin-scheduler-status] Unauthorized access attempt", { user_id: user.id });
+      return jsonResponse({ error: "Admin or owner access required" }, 403);
     }
 
     // Use service role client for privileged queries

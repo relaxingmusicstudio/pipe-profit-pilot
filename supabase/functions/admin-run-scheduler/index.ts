@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 /**
  * Admin Run Scheduler - Proxy to call ceo-scheduler with internal secret
  * 
- * This function allows authenticated admin users to trigger scheduler actions
+ * This function allows authenticated admin/owner users to trigger scheduler actions
  * without exposing INTERNAL_SCHEDULER_SECRET to the browser.
  * 
  * REQUIRES: verify_jwt = true in config.toml
@@ -56,22 +56,21 @@ serve(async (req) => {
       return jsonResponse({ error: "Authentication failed" }, 401);
     }
 
-    // Check if user is admin using user_roles table
+    // Check if user has admin OR owner role using user_roles table
     const { data: roleData, error: roleError } = await supabaseClient
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
-      .eq("role", "admin")
-      .maybeSingle();
+      .in("role", ["admin", "owner"]);
 
     if (roleError) {
       console.error("[admin-run-scheduler] Role check failed", { error: roleError.message });
       return jsonResponse({ error: "Failed to verify permissions" }, 500);
     }
 
-    if (!roleData) {
-      console.warn("[admin-run-scheduler] Non-admin access attempt", { user_id: user.id });
-      return jsonResponse({ error: "Admin access required" }, 403);
+    if (!roleData || roleData.length === 0) {
+      console.warn("[admin-run-scheduler] Unauthorized access attempt", { user_id: user.id });
+      return jsonResponse({ error: "Admin or owner access required" }, 403);
     }
 
     // Parse request body
