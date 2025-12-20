@@ -77,6 +77,18 @@ export const OWNER_NAV_ITEMS: NavItem[] = [
     description: "Content studio",
   },
   {
+    label: "Integrations",
+    href: "/app/integrations",
+    icon: ShieldCheck,
+    description: "Provider keys & connectivity",
+  },
+  {
+    label: "Plastic Surgeon",
+    href: "/app/pipelines/plastic-surgeon",
+    icon: Target,
+    description: "Lead engine",
+  },
+  {
     label: "Decisions",
     href: "/app/decisions",
     icon: CheckCircle2,
