@@ -53,6 +53,7 @@ export function useUserRole() {
   }, []);
 
   useEffect(() => {
+    if (mockMode) return;
     if (authLoading) return;
     
     if (!user) {

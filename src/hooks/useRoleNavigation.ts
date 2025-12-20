@@ -83,6 +83,12 @@ export const OWNER_NAV_ITEMS: NavItem[] = [
     description: "Provider keys & connectivity",
   },
   {
+    label: "Plastic Surgeon",
+    href: "/app/pipelines/plastic-surgeon",
+    icon: Target,
+    description: "Lead engine",
+  },
+  {
     label: "Decisions",
     href: "/app/decisions",
     icon: CheckCircle2,

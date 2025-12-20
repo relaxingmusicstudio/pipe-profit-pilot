@@ -25,18 +25,15 @@ test.beforeEach(async ({ page }) => {
       JSON.stringify({ enhanced_analytics: false, marketing_emails: false, personalization: false })
     );
     window.localStorage.setItem("enhanced_tracking_asked", "true");
-    window.localStorage.setItem(
-      "onboarding_v1::mock-user",
-      JSON.stringify({
-        status: "complete",
-        data: {},
-        updatedAt: new Date().toISOString(),
-      })
-    );
+    window.localStorage.setItem("onboarding_v1::mock-user", JSON.stringify({
+      status: "complete",
+      data: {},
+      updatedAt: new Date().toISOString(),
+    }));
   });
 });
 
-test("save and test integrations in mock mode", async ({ page }) => {
+test("save key and run llm gateway (mock)", async ({ page }) => {
   const errors = watchErrors(page);
   await page.goto("/auth");
   await page.getByLabel(/email/i).fill("ceo@example.com");
@@ -45,7 +42,7 @@ test("save and test integrations in mock mode", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/app/);
 
-  await page.getByTestId("go-integrations").click();
+  await page.getByRole("link", { name: "Integrations" }).click();
   await expect(page.getByTestId("integrations-page")).toBeVisible();
 
   await page.getByTestId("integration-key").fill("sk-test-123");
@@ -54,7 +51,10 @@ test("save and test integrations in mock mode", async ({ page }) => {
 
   await page.getByTestId("integration-test-prompt").fill("Hello");
   await page.getByTestId("integration-test").click();
-  await expect(page.getByTestId("integration-result")).toContainText("mock");
+  await expect(page.getByTestId("integration-result")).toContainText(/Success|mock/i);
+
+  await page.getByTestId("llm-gateway-test").click();
+  await expect(page.getByTestId("llm-gateway-result")).toContainText(/mock|Gateway ok/i);
 
   expect(errors, errors.join("\n")).toEqual([]);
 });

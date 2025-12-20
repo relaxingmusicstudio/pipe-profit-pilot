@@ -1,5 +1,5 @@
 -- Integrations storage for per-user API keys (encrypted at rest)
--- DO NOT STORE PLAINTEXT KEYS
+-- DO NOT STORE PLAINTEXT KEYS ANYWHERE
 
 create table if not exists public.user_integrations (
   id uuid primary key default gen_random_uuid(),
@@ -11,7 +11,6 @@ create table if not exists public.user_integrations (
   unique (user_id, provider)
 );
 
--- keep updated_at fresh
 create or replace function public.update_user_integrations_updated_at()
 returns trigger as $$
 begin
@@ -27,7 +26,6 @@ for each row execute function public.update_user_integrations_updated_at();
 
 alter table public.user_integrations enable row level security;
 
--- RLS: user can CRUD only their own rows
 create policy "user_integrations_select_own"
   on public.user_integrations
   for select using (auth.uid() = user_id);
