@@ -83,6 +83,12 @@ export const OWNER_NAV_ITEMS: NavItem[] = [
     description: "Provider keys & connectivity",
   },
   {
+    label: "LLM Smoke",
+    href: "/app/llm-smoke",
+    icon: Wrench,
+    description: "Safe live test surface",
+  },
+  {
     label: "Plastic Surgeon",
     href: "/app/pipelines/plastic-surgeon",
     icon: Target,

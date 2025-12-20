@@ -51,10 +51,14 @@ test("save key and run llm gateway (mock)", async ({ page }) => {
 
   await page.getByTestId("integration-test-prompt").fill("Hello");
   await page.getByTestId("integration-test").click();
-  await expect(page.getByTestId("integration-result")).toContainText(/Success|mock/i);
+  await expect(page.getByTestId("integration-result")).toContainText(/Success|OK|mock/i);
 
   await page.getByTestId("llm-gateway-test").click();
   await expect(page.getByTestId("llm-gateway-result")).toContainText(/mock|Gateway ok/i);
+
+  await page.getByRole("tab", { name: "Gemini" }).click();
+  await page.getByTestId("integration-test").click();
+  await expect(page.getByTestId("integration-result")).toContainText(/OK|Success|mock/i);
 
   expect(errors, errors.join("\n")).toEqual([]);
 });

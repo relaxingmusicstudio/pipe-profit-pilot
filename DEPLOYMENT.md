@@ -259,3 +259,14 @@ All AI calls are configured via environment variables (see Required Secrets abov
 - `OPENAI_API_KEY` - Optional for premium routing
 - `AI_PROVIDER`, `AI_MODEL_DEFAULT` - Default routing config
 - `AI_PROVIDER_PREMIUM`, `AI_MODEL_PREMIUM`, `AI_PREMIUM_ACTIONS` - Premium routing config
+---
+
+## Phase 4: Demo keys (Edge Functions)
+
+- Set server-side secrets in Supabase Edge Functions (never in VITE_*):
+  - GEMINI_API_KEY (optional demo key)
+  - OPENAI_API_KEY (optional demo key)
+  - LLM_ALLOW_DEMO_KEYS=true to allow demo keys as fallback
+  - LLM_LIVE_CALLS_DEFAULT=false (keep false unless you explicitly want live calls without a client toggle)
+- Client-side should only know VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY. Do **not** expose provider keys to the browser.
+- All LLM traffic must go through supabase/functions/llm-gateway; the Integrations and LLM Smoke pages already use this path.
