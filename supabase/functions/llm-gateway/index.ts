@@ -11,8 +11,8 @@ type Provider = (typeof PROVIDERS)[number];
 
 type RateEntry = { count: number; windowStart: number };
 const rateMap = new Map<string, RateEntry>();
-const RATE_LIMIT = 5;
-const RATE_WINDOW_MS = 60_000;
+const RATE_LIMIT = 10;
+const RATE_WINDOW_MS = 10 * 60 * 1000;
 
 const getEncryptionKey = async (): Promise<CryptoKey> => {
   const secret =
@@ -59,6 +59,26 @@ const checkRateLimit = (userId: string) => {
   return false;
 };
 
+const getDemoKey = (provider: Provider) => {
+  if (provider === "openai") return Deno.env.get("OPENAI_API_KEY");
+  if (provider === "gemini") return Deno.env.get("GEMINI_API_KEY");
+  return undefined;
+};
+
+const resolveKey = async (provider: Provider, ciphertext?: string | null) => {
+  if (ciphertext) {
+    return { key: await decrypt(ciphertext), usedDemoKey: false, demoAvailable: !!getDemoKey(provider) };
+  }
+  const allowDemo = Deno.env.get("LLM_ALLOW_DEMO_KEYS") === "true";
+  const demoKey = getDemoKey(provider);
+  if (allowDemo && demoKey) {
+    return { key: demoKey, usedDemoKey: true, demoAvailable: true };
+  }
+  throw new Error("No key configured. Add one in Integrations.");
+};
+
+const promptTooLong = (prompt: string) => prompt.length > 1500;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   const start = Date.now();
@@ -79,9 +99,11 @@ serve(async (req) => {
       });
     }
 
-    const { provider, task, input, meta } = await req.json();
+    const body = await req.json();
+    const { provider, task, input, meta } = body ?? {};
+
     if (!PROVIDERS.includes(provider)) {
-      return new Response(JSON.stringify({ ok: false, error: "Unsupported provider" }), {
+      return new Response(JSON.stringify({ ok: false, provider, code: "bad_provider", message: "Unsupported provider" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -94,8 +116,10 @@ serve(async (req) => {
         JSON.stringify({
           ok: true,
           provider,
-          latencyMs: 25,
-          output: `mock-${provider}-response`,
+          usedDemoKey: false,
+          demoAvailable: true,
+          latencyMs: 15,
+          text: "OK",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -110,35 +134,54 @@ serve(async (req) => {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
+      return new Response(JSON.stringify({ ok: false, provider, code: "unauthorized", message: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (checkRateLimit(user.id)) {
-      return new Response(JSON.stringify({ ok: false, error: "Rate limit exceeded" }), {
+      return new Response(JSON.stringify({ ok: false, provider, code: "rate_limited", message: "Rate limit exceeded" }), {
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { data: row, error } = await supabase
+    const { data: row } = await supabase
       .from("user_integrations")
       .select("api_key_ciphertext")
       .eq("user_id", user.id)
       .eq("provider", provider)
-      .single();
+      .maybeSingle();
 
-    if (error || !row) {
-      return new Response(JSON.stringify({ ok: false, error: "No key configured" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let resolved;
+    try {
+      resolved = await resolveKey(provider, row?.api_key_ciphertext);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No key configured. Add one in Integrations.";
+      return new Response(
+        JSON.stringify({ ok: false, provider, code: "no_key", message, demoAvailable: !!getDemoKey(provider) }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    const apiKey = await decrypt(row.api_key_ciphertext);
-    const prompt = typeof input === "string" && input.trim().length > 0 ? input : "Hello";
+    const allowLive = meta?.allowLive === true || Deno.env.get("LLM_LIVE_CALLS_DEFAULT") === "true";
+    if (!allowLive) {
+      return new Response(
+        JSON.stringify({ ok: false, provider, code: "live_disabled", message: "Live calls are disabled", demoAvailable: resolved.demoAvailable }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const prompt = typeof input === "string" && input.trim().length > 0 ? input : "Return only the word OK.";
+    if (promptTooLong(prompt)) {
+      return new Response(
+        JSON.stringify({ ok: false, provider, code: "prompt_too_long", message: "Prompt too long", demoAvailable: resolved.demoAvailable }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const maxTokens = Math.max(1, Math.min(256, meta?.maxTokens ?? 64));
 
     try {
       if (provider === "openai") {
@@ -148,12 +191,12 @@ serve(async (req) => {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
+              Authorization: `Bearer ${resolved.key}`,
             },
             body: JSON.stringify({
               model: "gpt-3.5-turbo",
               messages: [{ role: "user", content: prompt }],
-              max_tokens: 32,
+              max_tokens: maxTokens,
             }),
           },
           8000
@@ -161,24 +204,24 @@ serve(async (req) => {
         const latencyMs = Date.now() - start;
         if (!resp.ok) {
           const errText = await resp.text();
-          safeLog({ provider, task, status: resp.status, error: "openai_error" });
-          return new Response(JSON.stringify({ ok: false, error: errText.slice(0, 300) || resp.statusText }), {
-            status: resp.status,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          safeLog({ provider, task, status: resp.status, usedDemoKey: resolved.usedDemoKey, error: "openai_error" });
+          return new Response(
+            JSON.stringify({ ok: false, provider, code: "openai_error", message: errText.slice(0, 300) || resp.statusText }),
+            { status: resp.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
         const data = await resp.json();
-        const output = data?.choices?.[0]?.message?.content ?? "";
-        safeLog({ provider, task, latencyMs });
+        const text = data?.choices?.[0]?.message?.content?.toString()?.trim() ?? "";
+        safeLog({ provider, task, latencyMs, usedDemoKey: resolved.usedDemoKey });
         return new Response(
-          JSON.stringify({ ok: true, provider, latencyMs, output }),
+          JSON.stringify({ ok: true, provider, usedDemoKey: resolved.usedDemoKey, demoAvailable: resolved.demoAvailable, latencyMs, text }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       if (provider === "gemini") {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${encodeURIComponent(
-          apiKey
+          resolved.key
         )}`;
         const resp = await fetchWithAbort(
           url,
@@ -186,6 +229,7 @@ serve(async (req) => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              generationConfig: { maxOutputTokens: maxTokens },
               contents: [{ parts: [{ text: prompt }] }],
             }),
           },
@@ -194,39 +238,36 @@ serve(async (req) => {
         const latencyMs = Date.now() - start;
         if (!resp.ok) {
           const errText = await resp.text();
-          safeLog({ provider, task, status: resp.status, error: "gemini_error" });
-          return new Response(JSON.stringify({ ok: false, error: errText.slice(0, 300) || resp.statusText }), {
-            status: resp.status,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          safeLog({ provider, task, status: resp.status, usedDemoKey: resolved.usedDemoKey, error: "gemini_error" });
+          return new Response(
+            JSON.stringify({ ok: false, provider, code: "gemini_error", message: errText.slice(0, 300) || resp.statusText }),
+            { status: resp.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
         const data = await resp.json();
-        const output =
-          data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-          data?.candidates?.[0]?.output ||
-          "";
-        safeLog({ provider, task, latencyMs });
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.toString()?.trim() ?? "";
+        safeLog({ provider, task, latencyMs, usedDemoKey: resolved.usedDemoKey });
         return new Response(
-          JSON.stringify({ ok: true, provider, latencyMs, output }),
+          JSON.stringify({ ok: true, provider, usedDemoKey: resolved.usedDemoKey, demoAvailable: resolved.demoAvailable, latencyMs, text }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
-      return new Response(JSON.stringify({ ok: false, error: "Unsupported provider" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "LLM call failed";
-      safeLog({ provider, task, error: "llm_exception" });
-      return new Response(JSON.stringify({ ok: false, error: message }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      safeLog({ provider, task, error: "invoke_error", message: err instanceof Error ? err.message : String(err) });
+      return new Response(
+        JSON.stringify({ ok: false, provider, code: "invoke_error", message: "Provider request failed" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ ok: false, error: message, latencyMs: Date.now() - start }), {
+
+    return new Response(
+      JSON.stringify({ ok: false, provider, code: "unknown_error", message: "Unhandled provider" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unexpected error";
+    safeLog({ error: "unhandled", message });
+    return new Response(JSON.stringify({ ok: false, code: "unhandled", message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -41,7 +41,7 @@ const integrations: IntegrationConfig[] = [
     description: "Channel analytics, video management, trending videos",
     icon: <Youtube className="h-5 w-5" />,
     category: "Google",
-    placeholder: "AIza...",
+    placeholder: "Gemini server key",
     required: true
   },
   {

@@ -49,6 +49,7 @@ import AdminBusinessSetup from "./pages/AdminBusinessSetup";
 import AdminAutomation from "./pages/AdminAutomation";
 import CeoDashboard from "./pages/CeoDashboard";
 import Integrations from "./pages/Integrations";
+import LLMSmoke from "./pages/LLMSmoke";
 import PlasticSurgeonPipeline from "./pages/PlasticSurgeonPipeline";
 
 // Platform Admin (hidden from regular users)
@@ -151,6 +152,7 @@ const App = () => (
                     <Route path="vault" element={<ProtectedRoute requireOwner><KnowledgeVault /></ProtectedRoute>} />
                     <Route path="automation" element={<ProtectedRoute requireOwner><AdminAutomation /></ProtectedRoute>} />
                     <Route path="integrations" element={<ProtectedRoute requireOwner><Integrations /></ProtectedRoute>} />
+                    <Route path="llm-smoke" element={<ProtectedRoute requireOwner><LLMSmoke /></ProtectedRoute>} />
                     <Route path="pipelines/plastic-surgeon" element={<ProtectedRoute requireOwner><PlasticSurgeonPipeline /></ProtectedRoute>} />
                     
                     {/* Settings & System - Owner only */}

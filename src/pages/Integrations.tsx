@@ -17,10 +17,11 @@ const isMockMode = () =>
 export default function Integrations() {
   const [provider, setProvider] = useState<Provider>("openai");
   const [apiKey, setApiKey] = useState("");
-  const [prompt, setPrompt] = useState("Hello!");
+  const [prompt, setPrompt] = useState("Return only the word OK.");
   const [status, setStatus] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [llmResult, setLlmResult] = useState<string | null>(null);
+  const [demoAvailable, setDemoAvailable] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const { isAuthenticated } = useAuth();
 
@@ -37,24 +38,34 @@ export default function Integrations() {
           setApiKey("");
           return;
         }
-        setTestResult("Test succeeded (mock)");
+        setDemoAvailable(true);
+        setTestResult("OK (mock)");
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke("user-integrations", {
-        body: action === "save" ? { action, provider, apiKey } : { action, provider, prompt },
+      if (action === "save") {
+        const { data, error } = await supabase.functions.invoke("user-integrations", {
+          body: { action, provider, apiKey },
+          headers: { "x-mock-auth": mock ? "true" : "false" },
+        });
+        if (error) throw new Error(error.message);
+        if (!data?.ok) throw new Error(data?.error || "Request failed");
+        setStatus("Saved");
+        setApiKey("");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("llm-gateway", {
+        body: { provider, task: "test", input: prompt, meta: { source: "integrations-test", allowLive: true } },
         headers: { "x-mock-auth": mock ? "true" : "false" },
       });
 
       if (error) throw new Error(error.message);
-      if (!data?.ok) throw new Error(data?.error || "Request failed");
+      if (!data?.ok) throw new Error(data?.message || data?.error || "Request failed");
 
-      if (action === "save") {
-        setStatus("Saved");
-        setApiKey("");
-      } else {
-        setTestResult(`Success - ${data.provider ?? provider} - ${data.latencyMs ?? 0}ms`);
-      }
+      const responseText = (data.text ?? data.output ?? "OK").toString().slice(0, 120);
+      setDemoAvailable(Boolean(data.demoAvailable));
+      setTestResult(`Success - ${data.provider ?? provider} - ${data.latencyMs ?? 0}ms - ${responseText}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Something went wrong";
       if (action === "save") {
@@ -72,16 +83,19 @@ export default function Integrations() {
     setLlmResult(null);
     try {
       if (mock) {
+        setDemoAvailable(true);
         setLlmResult("Gateway ok (mock)");
         return;
       }
       const { data, error } = await supabase.functions.invoke("llm-gateway", {
-        body: { provider, task: "test", input: prompt, meta: {} },
+        body: { provider, task: "test", input: prompt, meta: { source: "integrations-gateway", allowLive: true } },
         headers: { "x-mock-auth": mock ? "true" : "false" },
       });
       if (error) throw new Error(error.message);
-      if (!data?.ok) throw new Error(data?.error || "Gateway failed");
-      setLlmResult(`Gateway ok - ${data.provider} - ${data.output ?? data.sampleText ?? "ok"}`);
+      if (!data?.ok) throw new Error(data?.message || data?.error || "Gateway failed");
+      const text = (data.text ?? data.output ?? data.sampleText ?? "OK").toString().slice(0, 120);
+      setDemoAvailable(Boolean(data.demoAvailable));
+      setLlmResult(`Gateway ok - ${data.provider} - ${text}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Gateway error";
       setLlmResult(`Error: ${message}`);
@@ -117,6 +131,7 @@ export default function Integrations() {
                 testResult={testResult}
                 loading={loading}
                 llmResult={llmResult}
+                demoAvailable={demoAvailable}
                 onKeyChange={setApiKey}
                 onPromptChange={setPrompt}
                 onSave={() => callFunction("save")}
@@ -133,6 +148,7 @@ export default function Integrations() {
                 testResult={testResult}
                 loading={loading}
                 llmResult={llmResult}
+                demoAvailable={demoAvailable}
                 onKeyChange={setApiKey}
                 onPromptChange={setPrompt}
                 onSave={() => callFunction("save")}
@@ -154,6 +170,7 @@ type FormProps = {
   status: string | null;
   testResult: string | null;
   llmResult: string | null;
+  demoAvailable: boolean | null;
   loading: boolean;
   onKeyChange: (val: string) => void;
   onPromptChange: (val: string) => void;
@@ -169,6 +186,7 @@ function IntegrationForm({
   status,
   testResult,
   llmResult,
+  demoAvailable,
   loading,
   onKeyChange,
   onPromptChange,
@@ -206,13 +224,18 @@ function IntegrationForm({
       </div>
       <div className="flex gap-3 items-center flex-wrap">
         <Button data-testid="integration-test" variant="outline" onClick={onTest} disabled={loading}>
-          Test key
+          Test {providerLabel}
         </Button>
         <Button data-testid="llm-gateway-test" variant="secondary" onClick={onGateway} disabled={loading}>
           Run LLM Gateway
         </Button>
         {testResult && <span data-testid="integration-result" className="text-sm">{testResult}</span>}
         {llmResult && <span data-testid="llm-gateway-result" className="text-sm">{llmResult}</span>}
+        {demoAvailable !== null && (
+          <span data-testid="integration-demo-available" className="text-xs text-muted-foreground">
+            Demo key available: {demoAvailable ? "Yes" : "No"}
+          </span>
+        )}
       </div>
     </div>
   );
