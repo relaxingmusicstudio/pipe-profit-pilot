@@ -26,6 +26,9 @@ jobs:
         env:
           VITE_MOCK_AUTH: "true"
 
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
       - name: E2E (mock)
         run: npm run test:e2e
         env:
