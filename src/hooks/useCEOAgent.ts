@@ -72,7 +72,8 @@ export const useCEOAgent = () => {
     timeRange: string = "7d",
     conversationHistory: ChatMessage[] = [],
     visitorId?: string,
-    intent?: string
+    intent?: string,
+    extraContext?: Record<string, unknown>
   ): Promise<CEOAgentResponse | null> => {
     setIsLoading(true);
     setError(null);
@@ -80,7 +81,7 @@ export const useCEOAgent = () => {
 
     try {
       const { data, error: invokeError } = await supabase.functions.invoke("ceo-agent", {
-        body: { query, timeRange, conversationHistory, visitorId, intent, onboardingContext },
+        body: { query, timeRange, conversationHistory, visitorId, intent, onboardingContext, extraContext },
       });
 
       if (invokeError) throw invokeError;
@@ -299,6 +300,27 @@ export const useCEOAgent = () => {
     askCEO("Look at conversations that converted. What patterns do you see? What language and approaches lead to successful closes?", "7d", history),
   [askCEO]);
 
+  const getDailyBrief = useCallback(
+    (context: {
+      onboarding: Record<string, unknown>;
+      planSummary: string;
+      checklistProgress: { completed: number; total: number };
+      lastDoNext?: { taskId?: string; text?: string; summary?: string } | null;
+    }) => {
+      const contextBlock = JSON.stringify(context, null, 2);
+      const query = [
+        "You are PipelinePRO's CEO execution coach.",
+        "Create a concise Daily CEO Brief focused on revenue impact.",
+        "Return JSON in a ```json block with fields: primaryFocus, whyItMatters, nextActions (1-3 steps, imperative).",
+        "Stay deterministic; avoid fluff.",
+        "Context:",
+        contextBlock,
+      ].join("\n");
+      return askCEO(query, "1d", [], undefined, "ceo_daily_brief", context);
+    },
+    [askCEO]
+  );
+
   return {
     askCEO,
     askCEOStream,
@@ -319,5 +341,6 @@ export const useCEOAgent = () => {
     findDropoffPatterns,
     suggestPromptImprovements,
     analyzeSuccessfulCloses,
+    getDailyBrief,
   };
 };

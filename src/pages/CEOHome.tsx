@@ -29,13 +29,20 @@ import {
   saveDoNextState,
   recordDoNextHistoryEntry,
 } from "@/lib/ceoChecklist";
+import {
+  computePlanHash,
+  DailyBriefState,
+  loadDailyBrief,
+  parseDailyBriefPayload,
+  saveDailyBrief,
+} from "@/lib/ceoDailyBrief";
 
 export default function CEOHome() {
   const { email, role, signOut, userId } = useAuth();
   const { status, isOnboardingComplete } = useOnboardingStatus();
   const navigate = useNavigate();
   const context = getOnboardingData(userId, email);
-  const { askCEO, isLoading: agentLoading } = useCEOAgent();
+  const { askCEO, getDailyBrief, isLoading: agentLoading } = useCEOAgent();
 
   const [plan, setPlan] = useState<CEOPlan | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
@@ -51,6 +58,8 @@ export default function CEOHome() {
       import.meta.env.VITE_MOCK_AUTH === "true" ||
       (typeof window !== "undefined" && window.localStorage.getItem("VITE_MOCK_AUTH") === "true")
   );
+  const [dailyBrief, setDailyBrief] = useState<DailyBriefState | null>(null);
+  const [dailyBriefLoading, setDailyBriefLoading] = useState(false);
 
   const hasContext =
     !!context.businessName ||
@@ -61,6 +70,9 @@ export default function CEOHome() {
 
   const onboardingHash = useMemo(() => computeOnboardingHash(userId, email), [userId, email, context]);
   const allowPlanSections = isOnboardingComplete || isMockMode;
+  const planHash = useMemo(() => computePlanHash(plan?.planMarkdown || ""), [plan?.planMarkdown]);
+  const briefNeedsRefresh =
+    dailyBrief && (dailyBrief.onboardingHash !== onboardingHash || dailyBrief.planHash !== planHash);
 
   useEffect(() => {
     const mockFlag =
@@ -85,6 +97,7 @@ export default function CEOHome() {
     setChecklistState(loadChecklistState(userId, email));
     setActionPlan(loadDoNextState(userId, email));
     setDoNextHistory(loadDoNextHistory(userId, email));
+    setDailyBrief(loadDailyBrief(userId, email));
   }, [userId, email, isMockMode, onboardingHash]);
 
   useEffect(() => {
@@ -186,6 +199,53 @@ export default function CEOHome() {
     setSelectedHistoryKey(`${historyEntry.checklistItemId}-${historyEntry.createdAt}`);
     setHistoryOpen(true);
     setDoNextLoading(false);
+  };
+
+  const handleGenerateDailyBrief = async () => {
+    if (dailyBriefLoading) return;
+    setDailyBriefLoading(true);
+
+    const planSummary = plan?.planMarkdown ? plan.planMarkdown.slice(0, 800) : "No CEO plan has been generated.";
+    const checklistProgress = { completed: checklistState.completedIds.length, total: checklist.length };
+    const lastEntry = actionPlan || (doNextHistory.length > 0 ? doNextHistory[0] : null);
+    const lastDoNextContext = lastEntry
+      ? {
+          taskId: (lastEntry as any).taskId || (lastEntry as any).checklistItemId,
+          text: (lastEntry as any).checklistItemText || (lastEntry as any).taskId || nextTask?.text || "",
+          summary:
+            (lastEntry as any).parsedJson?.steps?.map((s: any) => `${s.label}: ${s.expectedOutcome}`).join("; ") ||
+            (lastEntry as any).responseMarkdown ||
+            (lastEntry as any).rawResponse ||
+            "",
+        }
+      : null;
+
+    let rawResponse = "";
+    if (!isMockMode) {
+      const resp = await getDailyBrief?.({
+        onboarding: context,
+        planSummary,
+        checklistProgress,
+        lastDoNext: lastDoNextContext,
+      });
+      rawResponse = resp?.response ?? "";
+    }
+
+    if (!rawResponse) {
+      rawResponse = buildMockDailyBrief(planSummary, checklistProgress, lastDoNextContext);
+    }
+
+    const parsed = parseDailyBriefPayload(rawResponse);
+    const next: DailyBriefState = {
+      payload: parsed,
+      rawResponse,
+      createdAt: new Date().toISOString(),
+      onboardingHash,
+      planHash,
+    };
+    setDailyBrief(next);
+    saveDailyBrief(next, userId, email);
+    setDailyBriefLoading(false);
   };
 
   const handleSelectHistory = (entry: DoNextHistoryEntry) => {
@@ -339,6 +399,66 @@ export default function CEOHome() {
           )}
           {!plan && (
             <div style={{ opacity: 0.7 }}>No plan generated yet. Use your onboarding data to draft a CEO action plan.</div>
+          )}
+        </div>
+      )}
+
+      {allowPlanSections && (
+        <div
+          style={{
+            padding: 16,
+            borderRadius: 12,
+            border: "1px solid rgba(0,0,0,0.1)",
+            background: "rgba(0,0,0,0.02)",
+            marginBottom: 16,
+          }}
+          data-testid="daily-brief-card"
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div style={{ fontWeight: 800, fontSize: 16 }}>Daily CEO Brief</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {briefNeedsRefresh && (
+                <span style={{ padding: "2px 8px", borderRadius: 999, background: "#fef3c7", color: "#92400e", fontSize: 12 }}>
+                  Refresh recommended
+                </span>
+              )}
+              <button
+                onClick={handleGenerateDailyBrief}
+                disabled={dailyBriefLoading || agentLoading}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(0,0,0,0.15)",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  opacity: dailyBriefLoading || agentLoading ? 0.6 : 1,
+                }}
+              >
+                {dailyBrief ? "Regenerate" : "Generate Daily Brief"}
+              </button>
+            </div>
+          </div>
+          {dailyBrief && dailyBrief.payload ? (
+            <div
+              style={{
+                border: "1px solid rgba(0,0,0,0.08)",
+                borderRadius: 8,
+                padding: 12,
+                background: "white",
+                lineHeight: 1.5,
+              }}
+            >
+              <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>{dailyBrief.payload.primaryFocus}</div>
+              <div style={{ opacity: 0.8, marginBottom: 8 }}>{dailyBrief.payload.whyItMatters}</div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Next action</div>
+              <ol style={{ marginLeft: 16, display: "grid", gap: 4 }}>
+                {dailyBrief.payload.nextActions.map((step, idx) => (
+                  <li key={idx}>{step}</li>
+                ))}
+              </ol>
+            </div>
+          ) : (
+            <div style={{ opacity: 0.7 }}>No daily brief yet. Generate one to focus today&apos;s effort.</div>
           )}
         </div>
       )}
@@ -593,6 +713,23 @@ const buildMockDoNextResponse = (taskText: string) => {
   return ["```json", JSON.stringify(payload, null, 2), "```"].join("\n");
 };
 
+const buildMockDailyBrief = (
+  planSummary: string,
+  checklistProgress: { completed: number; total: number },
+  lastDoNext?: { taskId?: string; text?: string; summary?: string } | null
+) => {
+  const focus = lastDoNext?.text || "Push the highest impact revenue task forward today";
+  const steps = lastDoNext?.summary
+    ? [`Confirm progress on "${lastDoNext.text}"`, "Unblock owners and set ETA", "Send status update by EOD"]
+    : ["Pick the top revenue task", "Schedule one customer touchpoint", "Ship one tangible deliverable"];
+  const payload = {
+    primaryFocus: focus,
+    whyItMatters: `Keeps the go-to-market plan moving while ${checklistProgress.completed}/${checklistProgress.total} items are complete. Plan snapshot: ${planSummary.slice(0, 120)}`,
+    nextActions: steps.slice(0, 3),
+  };
+  return ["```json", JSON.stringify(payload, null, 2), "```"].join("\n");
+};
+
 const getMockPlanMarkdown = () =>
   [
     "## Goals",
@@ -620,3 +757,4 @@ const ContextField = ({ label, value }: { label: string; value?: string }) => (
     <div style={{ fontWeight: 700, marginTop: 4 }}>{value || "—"}</div>
   </div>
 );
+
