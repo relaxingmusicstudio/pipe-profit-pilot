@@ -15,7 +15,6 @@
     "release:gate": "node scripts/release-gate.cjs",
     "pr:open": "node scripts/pr-open.cjs",
     "pr:merge": "node scripts/pr-merge.cjs"
-
   },
   "dependencies": {
     "@elevenlabs/react": "^0.12.3",
