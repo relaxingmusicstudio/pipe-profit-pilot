@@ -15,6 +15,7 @@ export type ChecklistState = {
 
 const CHECKLIST_PREFIX = "ppp:ceoPlanChecklist:v1::";
 const DO_NEXT_PREFIX = "ppp:ceoDoNext:v1::";
+const DO_NEXT_HISTORY_PREFIX = "ppp:ceoDoNextHistory:v1::";
 
 const makeKey = (prefix: string, userId?: string | null, email?: string | null) =>
   `${prefix}${userId || email || "anonymous"}`;
@@ -78,7 +79,11 @@ export const saveChecklistState = (
 export type DoNextState = {
   taskId: string;
   responseMarkdown: string;
+  parsedJson: DoNextPayload | null;
   updatedAt: string;
+  agentIntent?: string;
+  checklistItemText?: string;
+  rawResponse?: string;
 };
 
 export const loadDoNextState = (userId?: string | null, email?: string | null): DoNextState | null => {
@@ -86,7 +91,12 @@ export const loadDoNextState = (userId?: string | null, email?: string | null): 
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
-    return JSON.parse(raw) as DoNextState;
+    const parsed = JSON.parse(raw) as DoNextState;
+    return {
+      ...parsed,
+      responseMarkdown: parsed.responseMarkdown || parsed.rawResponse || "",
+      parsedJson: parsed.parsedJson ?? parseDoNextPayload(parsed.responseMarkdown || parsed.rawResponse || ""),
+    };
   } catch {
     return null;
   }
@@ -109,3 +119,137 @@ export const getPlanChecklist = (userId?: string | null, email?: string | null):
 
 export const getOnboardingSnapshotHash = (userId?: string | null, email?: string | null) =>
   hashString(JSON.stringify(getOnboardingData(userId, email)));
+
+export type DoNextStep = {
+  label: string;
+  expectedOutcome: string;
+  estimatedMinutes?: number;
+};
+
+export type DoNextPayload = {
+  title: string;
+  objective: string;
+  steps: DoNextStep[];
+  successCriteria: string[];
+  blockers: string[];
+  escalationPrompt: string;
+};
+
+export type DoNextHistoryEntry = {
+  createdAt: string;
+  checklistItemId: string;
+  checklistItemText: string;
+  agentIntent: string;
+  rawResponse: string;
+  parsedJson: DoNextPayload | null;
+};
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
+
+const coerceMinutes = (value: unknown): number | undefined => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const num = Number.parseFloat(value);
+    if (Number.isFinite(num)) return num;
+  }
+  return undefined;
+};
+
+const normalizeDoNextPayload = (value: any): DoNextPayload | null => {
+  if (!value || typeof value !== "object") return null;
+
+  const steps: DoNextStep[] = Array.isArray(value.steps)
+    ? value.steps
+        .map((step: any) => {
+          if (!step || typeof step !== "object") return null;
+          const label = isNonEmptyString(step.label) ? step.label.trim() : null;
+          const expectedOutcome = isNonEmptyString(step.expectedOutcome) ? step.expectedOutcome.trim() : null;
+          if (!label || !expectedOutcome) return null;
+          const estimatedMinutes = coerceMinutes(step.estimatedMinutes);
+          return estimatedMinutes !== undefined
+            ? { label, expectedOutcome, estimatedMinutes }
+            : { label, expectedOutcome };
+        })
+        .filter(Boolean) as DoNextStep[]
+    : [];
+
+  const payload: DoNextPayload = {
+    title: isNonEmptyString(value.title) ? value.title.trim() : "",
+    objective: isNonEmptyString(value.objective) ? value.objective.trim() : "",
+    steps,
+    successCriteria: Array.isArray(value.successCriteria)
+      ? value.successCriteria.filter(isNonEmptyString).map((item: string) => item.trim())
+      : [],
+    blockers: Array.isArray(value.blockers)
+      ? value.blockers.filter(isNonEmptyString).map((item: string) => item.trim())
+      : [],
+    escalationPrompt: isNonEmptyString(value.escalationPrompt) ? value.escalationPrompt.trim() : "",
+  };
+
+  if (!payload.title || !payload.objective || payload.steps.length === 0 || !payload.escalationPrompt) {
+    return null;
+  }
+
+  return payload;
+};
+
+export const parseDoNextPayload = (rawResponse: string): DoNextPayload | null => {
+  if (!rawResponse) return null;
+
+  const fenceMatch =
+    rawResponse.match(/```json\s*([\s\S]*?)```/i) ||
+    rawResponse.match(/```\s*([\s\S]*?)```/i);
+  const candidates = [];
+  if (fenceMatch?.[1]) {
+    candidates.push(fenceMatch[1]);
+  }
+  candidates.push(rawResponse);
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate.trim());
+      const normalized = normalizeDoNextPayload(parsed);
+      if (normalized) return normalized;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+};
+
+export const loadDoNextHistory = (userId?: string | null, email?: string | null): DoNextHistoryEntry[] => {
+  const key = makeKey(DO_NEXT_HISTORY_PREFIX, userId, email);
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as DoNextHistoryEntry[];
+    return parsed.map((entry) => ({
+      ...entry,
+      parsedJson: entry.parsedJson ?? parseDoNextPayload(entry.rawResponse),
+    }));
+  } catch {
+    return [];
+  }
+};
+
+export const saveDoNextHistory = (
+  history: DoNextHistoryEntry[],
+  userId?: string | null,
+  email?: string | null
+) => {
+  const key = makeKey(DO_NEXT_HISTORY_PREFIX, userId, email);
+  localStorage.setItem(key, JSON.stringify(history.slice(0, 20)));
+};
+
+export const recordDoNextHistoryEntry = (
+  entry: DoNextHistoryEntry,
+  userId?: string | null,
+  email?: string | null
+): DoNextHistoryEntry[] => {
+  const existing = loadDoNextHistory(userId, email);
+  const nextHistory = [entry, ...existing].slice(0, 20);
+  saveDoNextHistory(nextHistory, userId, email);
+  return nextHistory;
+};

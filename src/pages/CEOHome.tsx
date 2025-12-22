@@ -18,12 +18,16 @@ import {
   ChecklistItem,
   ChecklistState,
   DoNextState,
+  DoNextHistoryEntry,
   getPlanChecklist,
   loadChecklistState,
   loadDoNextState,
+  loadDoNextHistory,
+  parseDoNextPayload,
   parsePlanToChecklist,
   saveChecklistState,
   saveDoNextState,
+  recordDoNextHistoryEntry,
 } from "@/lib/ceoChecklist";
 
 export default function CEOHome() {
@@ -39,6 +43,14 @@ export default function CEOHome() {
   const [checklistState, setChecklistState] = useState<ChecklistState>({ completedIds: [], updatedAt: null });
   const [actionPlan, setActionPlan] = useState<DoNextState | null>(null);
   const [doNextLoading, setDoNextLoading] = useState(false);
+  const [doNextHistory, setDoNextHistory] = useState<DoNextHistoryEntry[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [selectedHistoryKey, setSelectedHistoryKey] = useState<string | null>(null);
+  const [isMockMode, setIsMockMode] = useState(
+    () =>
+      import.meta.env.VITE_MOCK_AUTH === "true" ||
+      (typeof window !== "undefined" && window.localStorage.getItem("VITE_MOCK_AUTH") === "true")
+  );
 
   const hasContext =
     !!context.businessName ||
@@ -48,14 +60,32 @@ export default function CEOHome() {
     !!context.offerPricing;
 
   const onboardingHash = useMemo(() => computeOnboardingHash(userId, email), [userId, email, context]);
+  const allowPlanSections = isOnboardingComplete || isMockMode;
 
   useEffect(() => {
-    const existingPlan = loadCEOPlan(userId, email);
+    const mockFlag =
+      import.meta.env.VITE_MOCK_AUTH === "true" ||
+      (typeof window !== "undefined" && window.localStorage.getItem("VITE_MOCK_AUTH") === "true");
+    setIsMockMode(mockFlag);
+  }, []);
+
+  useEffect(() => {
+    let existingPlan = loadCEOPlan(userId, email);
+    if (!existingPlan && isMockMode) {
+      existingPlan = {
+        planMarkdown: getMockPlanMarkdown(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        onboardingSnapshotHash: onboardingHash,
+      };
+      saveCEOPlan(existingPlan, userId, email);
+    }
     setPlan(existingPlan);
-    setChecklist(getPlanChecklist(userId, email));
+    setChecklist(existingPlan ? parsePlanToChecklist(existingPlan.planMarkdown) : getPlanChecklist(userId, email));
     setChecklistState(loadChecklistState(userId, email));
     setActionPlan(loadDoNextState(userId, email));
-  }, [userId, email]);
+    setDoNextHistory(loadDoNextHistory(userId, email));
+  }, [userId, email, isMockMode, onboardingHash]);
 
   useEffect(() => {
     if (plan?.planMarkdown) {
@@ -110,23 +140,67 @@ export default function CEOHome() {
   const handleDoNext = async () => {
     if (!nextTask) return;
     setDoNextLoading(true);
-    const resp = await askCEO(
-      `Provide a short action plan for this task: ${nextTask.text}. Return markdown with 3 bullet steps and expected outcome.`,
-      "7d",
-      [],
-      undefined,
-      "ceo_do_next"
-    );
-    if (resp?.response) {
-      const next: DoNextState = {
-        taskId: nextTask.id,
-        responseMarkdown: resp.response,
-        updatedAt: new Date().toISOString(),
-      };
-      setActionPlan(next);
-      saveDoNextState(next, userId, email);
+    const agentIntent = "ceo_do_next";
+    let rawResponse = "";
+
+    if (!isMockMode) {
+      const resp = await askCEO(
+        `You are PipelinePRO's CEO execution coach. For the task "${nextTask.text}", return a JSON block wrapped in \`\`\`json ... \`\`\` with fields: title, objective, steps[{label, expectedOutcome, estimatedMinutes}], successCriteria[], blockers[], escalationPrompt. If you cannot format JSON, fall back to concise markdown bullets with expected outcomes.`,
+        "7d",
+        [],
+        undefined,
+        agentIntent
+      );
+      rawResponse = resp?.response ?? "";
     }
+
+    if (!rawResponse) {
+      rawResponse = buildMockDoNextResponse(nextTask.text);
+    }
+
+    const parsedPayload = parseDoNextPayload(rawResponse);
+    const next: DoNextState = {
+      taskId: nextTask.id,
+      responseMarkdown: rawResponse,
+      parsedJson: parsedPayload,
+      updatedAt: new Date().toISOString(),
+      agentIntent,
+      checklistItemText: nextTask.text,
+      rawResponse,
+    };
+
+    setActionPlan(next);
+    saveDoNextState(next, userId, email);
+
+    const historyEntry: DoNextHistoryEntry = {
+      createdAt: next.updatedAt,
+      checklistItemId: nextTask.id,
+      checklistItemText: nextTask.text,
+      agentIntent,
+      rawResponse,
+      parsedJson: parsedPayload,
+    };
+
+    const nextHistory = recordDoNextHistoryEntry(historyEntry, userId, email);
+    setDoNextHistory(nextHistory);
+    setSelectedHistoryKey(`${historyEntry.checklistItemId}-${historyEntry.createdAt}`);
+    setHistoryOpen(true);
     setDoNextLoading(false);
+  };
+
+  const handleSelectHistory = (entry: DoNextHistoryEntry) => {
+    const selected: DoNextState = {
+      taskId: entry.checklistItemId,
+      responseMarkdown: entry.rawResponse,
+      parsedJson: entry.parsedJson,
+      updatedAt: entry.createdAt,
+      agentIntent: entry.agentIntent,
+      checklistItemText: entry.checklistItemText,
+      rawResponse: entry.rawResponse,
+    };
+    setActionPlan(selected);
+    setSelectedHistoryKey(`${entry.checklistItemId}-${entry.createdAt}`);
+    saveDoNextState(selected, userId, email);
   };
 
   return (
@@ -170,7 +244,7 @@ export default function CEOHome() {
         </div>
       )}
 
-      {isOnboardingComplete && (
+      {allowPlanSections && (
         <div
           style={{
             padding: 16,
@@ -212,7 +286,7 @@ export default function CEOHome() {
         </div>
       )}
 
-      {isOnboardingComplete && (
+      {allowPlanSections && (
         <div
           style={{
             padding: 16,
@@ -269,7 +343,7 @@ export default function CEOHome() {
         </div>
       )}
 
-      {isOnboardingComplete && plan && (
+      {allowPlanSections && plan && (
         <div
           style={{
             padding: 16,
@@ -309,6 +383,7 @@ export default function CEOHome() {
             <button
               onClick={handleDoNext}
               disabled={!nextTask || doNextLoading || agentLoading}
+              data-testid="do-next-button"
               style={{
                 padding: "8px 12px",
                 borderRadius: 8,
@@ -328,15 +403,121 @@ export default function CEOHome() {
                 borderRadius: 8,
                 padding: 12,
                 background: "white",
-                whiteSpace: "pre-wrap",
-                lineHeight: 1.5,
-                fontFamily: "Inter, system-ui, sans-serif",
                 marginTop: 12,
               }}
+              data-testid="do-next-output"
             >
-              {actionPlan.responseMarkdown}
+              {actionPlan.parsedJson ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 16 }}>{actionPlan.parsedJson.title}</div>
+                    <div style={{ opacity: 0.75 }}>{actionPlan.parsedJson.objective}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>Steps</div>
+                    <ol style={{ marginLeft: 18, display: "grid", gap: 6 }}>
+                      {actionPlan.parsedJson.steps.map((step, idx) => (
+                        <li key={idx}>
+                          <div style={{ fontWeight: 700 }}>{step.label}</div>
+                          <div style={{ opacity: 0.8 }}>{step.expectedOutcome}</div>
+                          {typeof step.estimatedMinutes === "number" && (
+                            <div style={{ opacity: 0.65, fontSize: 12 }}>~{step.estimatedMinutes} min</div>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                  {actionPlan.parsedJson.successCriteria.length > 0 && (
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: 4 }}>Success criteria</div>
+                      <ul style={{ marginLeft: 16 }}>
+                        {actionPlan.parsedJson.successCriteria.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {actionPlan.parsedJson.blockers.length > 0 && (
+                    <div>
+                      <div style={{ fontWeight: 700, marginBottom: 4 }}>Potential blockers</div>
+                      <ul style={{ marginLeft: 16 }}>
+                        {actionPlan.parsedJson.blockers.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>If blocked</div>
+                    <div style={{ opacity: 0.8 }}>{actionPlan.parsedJson.escalationPrompt}</div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, fontFamily: "Inter, system-ui, sans-serif" }}>
+                  {actionPlan.responseMarkdown}
+                </div>
+              )}
             </div>
           )}
+
+          <div style={{ marginTop: 12 }}>
+            <button
+              onClick={() => setHistoryOpen((open) => !open)}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 8,
+                border: "1px solid rgba(0,0,0,0.15)",
+                cursor: "pointer",
+                fontWeight: 700,
+                background: historyOpen ? "rgba(0,0,0,0.05)" : "white",
+              }}
+              data-testid="do-next-history-toggle"
+            >
+              Do Next History ({doNextHistory.length})
+            </button>
+            {historyOpen && (
+              <div
+                style={{
+                  marginTop: 8,
+                  border: "1px solid rgba(0,0,0,0.08)",
+                  borderRadius: 8,
+                  padding: 10,
+                  background: "white",
+                }}
+                data-testid="do-next-history-list"
+              >
+                {doNextHistory.length === 0 && <div style={{ opacity: 0.7 }}>No history yet.</div>}
+                {doNextHistory.length > 0 && (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {doNextHistory.map((entry) => {
+                      const key = `${entry.checklistItemId}-${entry.createdAt}`;
+                      const title = entry.parsedJson?.title || entry.checklistItemText || "Do Next run";
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => handleSelectHistory(entry)}
+                          style={{
+                            textAlign: "left",
+                            borderRadius: 8,
+                            border: "1px solid rgba(0,0,0,0.08)",
+                            padding: "8px 10px",
+                            background: selectedHistoryKey === key ? "rgba(0,0,0,0.05)" : "white",
+                            cursor: "pointer",
+                          }}
+                          data-testid="do-next-history-item"
+                        >
+                          <div style={{ fontWeight: 700 }}>{title}</div>
+                          <div style={{ opacity: 0.7, fontSize: 12 }}>
+                            {new Date(entry.createdAt).toLocaleString()}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -378,6 +559,52 @@ export default function CEOHome() {
     </div>
   );
 }
+
+const buildMockDoNextResponse = (taskText: string) => {
+  const payload = {
+    title: `Next step: ${taskText}`,
+    objective: `Make clear progress on "${taskText}" today.`,
+    steps: [
+      {
+        label: "Define the outcome",
+        expectedOutcome: `Document what "done" means for ${taskText}.`,
+        estimatedMinutes: 10,
+      },
+      {
+        label: "Prepare resources",
+        expectedOutcome: "List assets, people, and access needed to execute.",
+        estimatedMinutes: 15,
+      },
+      {
+        label: "Execute first move",
+        expectedOutcome: "Complete the first concrete deliverable and share status.",
+        estimatedMinutes: 20,
+      },
+    ],
+    successCriteria: [
+      "Outcome definition is shared and agreed",
+      "Blockers and dependencies are documented",
+      "Owner and timeline for next checkpoint are set",
+    ],
+    blockers: ["Waiting on approvals", "Missing access or assets"],
+    escalationPrompt: "If blocked, ask: What decision or resource do we need to unblock this task today?",
+  };
+
+  return ["```json", JSON.stringify(payload, null, 2), "```"].join("\n");
+};
+
+const getMockPlanMarkdown = () =>
+  [
+    "## Goals",
+    "- Draft landing page for spring promo",
+    "- Launch Google Ads test",
+    "- Follow up with warm leads",
+    "",
+    "## Next 7 Days",
+    "1. Publish landing page with offer and booking form",
+    "2. Set up two ad groups with $50/day budget",
+    "3. Send follow-up emails to warm leads and book calls",
+  ].join("\n");
 
 const ContextField = ({ label, value }: { label: string; value?: string }) => (
   <div

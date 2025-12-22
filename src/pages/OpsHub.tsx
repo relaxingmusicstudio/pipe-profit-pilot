@@ -126,12 +126,13 @@ export default function OpsHub() {
   };
 
   return (
-    <div className="container py-8 space-y-6" data-testid="ops-home">
-      <Helmet>
-        <title>Ops Hub</title>
-      </Helmet>
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
+    <div data-testid="ops-home">
+      <div className="container py-8 space-y-6">
+        <Helmet>
+          <title>Ops Hub</title>
+        </Helmet>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
           <h1 className="text-3xl font-bold">Ops Hub</h1>
           <p className="text-muted-foreground">
             Owner-only playbook for deployments, proof gate, and API readiness.
@@ -251,6 +252,7 @@ export default function OpsHub() {
           </p>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
