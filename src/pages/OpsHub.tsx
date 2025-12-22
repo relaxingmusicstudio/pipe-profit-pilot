@@ -4,7 +4,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { envSchema } from "@/lib/envSchema";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  createDeterministicMockFob,
+  createFailureOutputPacket,
+  FailureOutputPacket,
+  generateMaintenanceReport,
+  loadFobHistory,
+  MaintenanceReportBundle,
+  recordFobHistoryEntry,
+} from "@/lib/maintenanceFob";
 
 type ChecklistState = Record<string, boolean>;
 
@@ -89,9 +101,25 @@ const isMockMode = () =>
   (typeof window !== "undefined" && window.localStorage.getItem("VITE_MOCK_AUTH") === "true");
 
 export default function OpsHub() {
+  const { userId, email } = useAuth();
   const mock = useMemo(() => isMockMode(), []);
   const [checklist, setChecklist] = useState<ChecklistState>({});
   const [copied, setCopied] = useState<string | null>(null);
+  const [fobHistory, setFobHistory] = useState<FailureOutputPacket[]>([]);
+  const [selectedFobId, setSelectedFobId] = useState<string | null>(null);
+  const [fobCiRunUrl, setFobCiRunUrl] = useState("");
+  const [fobScriptCommand, setFobScriptCommand] = useState("VITE_MOCK_AUTH=true npm run test:e2e");
+  const [fobStdoutPath, setFobStdoutPath] = useState("test-results/e2e.stdout.txt");
+  const [fobStderrPath, setFobStderrPath] = useState("test-results/e2e.stderr.txt");
+  const [fobPlaywrightOutput, setFobPlaywrightOutput] = useState("");
+  const [fobLogsText, setFobLogsText] = useState("");
+  const [fobCopied, setFobCopied] = useState(false);
+  const [report, setReport] = useState<MaintenanceReportBundle | null>(null);
+
+  const selectedFob = useMemo(() => {
+    if (fobHistory.length === 0) return null;
+    return fobHistory.find((f) => f.id === selectedFobId) ?? fobHistory[0];
+  }, [fobHistory, selectedFobId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -110,6 +138,18 @@ export default function OpsHub() {
     window.localStorage.setItem(storageKey, JSON.stringify(checklist));
   }, [checklist]);
 
+  useEffect(() => {
+    const loaded = loadFobHistory(userId, email);
+    if (loaded.length === 0 && mock) {
+      const seeded = recordFobHistoryEntry(createDeterministicMockFob(), userId, email, 5);
+      setFobHistory(seeded);
+      setSelectedFobId(seeded[0]?.id ?? null);
+      return;
+    }
+    setFobHistory(loaded);
+    setSelectedFobId(loaded[0]?.id ?? null);
+  }, [userId, email, mock]);
+
   const toggle = (id: string, value: boolean) => {
     setChecklist((prev) => ({ ...prev, [id]: value }));
   };
@@ -123,6 +163,45 @@ export default function OpsHub() {
     } catch (_err) {
       // ignore clipboard permission errors in headless
     }
+  };
+
+  const captureFob = () => {
+    const scripts = [
+      {
+        command: fobScriptCommand.trim(),
+        stdoutPath: fobStdoutPath.trim() || null,
+        stderrPath: fobStderrPath.trim() || null,
+      },
+    ].filter((s) => s.command.length > 0);
+
+    const nextFob = createFailureOutputPacket({
+      ciRunUrl: fobCiRunUrl.trim() || null,
+      scripts,
+      playwrightOutput: fobPlaywrightOutput.trim() || null,
+      logsText: fobLogsText.trim() || null,
+      logsCapturePath: null,
+    });
+
+    const nextHistory = recordFobHistoryEntry(nextFob, userId, email, 5);
+    setFobHistory(nextHistory);
+    setSelectedFobId(nextHistory[0]?.id ?? null);
+  };
+
+  const copyFobToClipboard = async () => {
+    if (!selectedFob) return;
+    const text = JSON.stringify(selectedFob, null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // ignore clipboard permission errors in headless
+    }
+    setFobCopied(true);
+    setTimeout(() => setFobCopied(false), 1500);
+  };
+
+  const handleGenerateReport = () => {
+    const next = generateMaintenanceReport({ userId, email, fobHistory });
+    setReport(next);
   };
 
   return (
@@ -250,6 +329,116 @@ export default function OpsHub() {
           <p className="text-sm">
             docs/TWILIO_A2P.md — A2P readiness and fallbacks.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="maintenance-home">
+        <CardHeader>
+          <CardTitle>Maintenance</CardTitle>
+          <CardDescription>Failure Output Packet (FOB) + deterministic health report.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="text-sm text-muted-foreground">
+              Latest FOB: {selectedFob ? new Date(selectedFob.createdAt).toLocaleString() : "(none)"}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={copyFobToClipboard}
+                disabled={!selectedFob}
+                data-testid="maintenance-copy-fob"
+              >
+                {fobCopied ? "Copied" : "Copy FOB to Clipboard"}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleGenerateReport}
+                disabled={fobHistory.length === 0}
+                data-testid="maintenance-generate-report"
+              >
+                Generate Report
+              </Button>
+            </div>
+          </div>
+
+          {fobHistory.length > 0 && (
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <div className="text-sm font-medium">FOB history (last 5)</div>
+                <div className="grid gap-2">
+                  {fobHistory.slice(0, 5).map((entry) => (
+                    <Button
+                      key={entry.id}
+                      variant={selectedFob?.id === entry.id ? "default" : "outline"}
+                      size="sm"
+                      className="justify-start"
+                      onClick={() => setSelectedFobId(entry.id)}
+                    >
+                      <span className="truncate">
+                        {new Date(entry.createdAt).toLocaleString()} —{" "}
+                        {entry.playwright?.failed && entry.playwright.failed > 0 ? "FAIL" : "OK"}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Selected FOB JSON</div>
+                <pre className="text-xs bg-muted rounded p-3 whitespace-pre-wrap max-h-64 overflow-auto">
+                  {selectedFob ? JSON.stringify(selectedFob, null, 2) : "(none)"}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded border p-3 space-y-3">
+            <div className="font-medium">Capture a FOB (manual paste)</div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">CI run URL (optional)</div>
+                <Input value={fobCiRunUrl} onChange={(e) => setFobCiRunUrl(e.target.value)} placeholder="https://github.com/.../actions/runs/..." />
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">Script command</div>
+                <Input value={fobScriptCommand} onChange={(e) => setFobScriptCommand(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">stdout capture path (optional)</div>
+                <Input value={fobStdoutPath} onChange={(e) => setFobStdoutPath(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">stderr capture path (optional)</div>
+                <Input value={fobStderrPath} onChange={(e) => setFobStderrPath(e.target.value)} />
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">Playwright output (paste)</div>
+                <Textarea value={fobPlaywrightOutput} onChange={(e) => setFobPlaywrightOutput(e.target.value)} placeholder="Paste playwright output here..." />
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">Relevant logs (paste, last 200 lines kept)</div>
+                <Textarea value={fobLogsText} onChange={(e) => setFobLogsText(e.target.value)} placeholder="Paste logs here..." />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button size="sm" variant="secondary" onClick={captureFob}>
+                Save FOB
+              </Button>
+            </div>
+          </div>
+
+          {report && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Health report (daily + weekly)</div>
+              <pre className="text-xs bg-muted rounded p-3 whitespace-pre-wrap max-h-72 overflow-auto">
+                {JSON.stringify(report, null, 2)}
+              </pre>
+            </div>
+          )}
         </CardContent>
       </Card>
       </div>
