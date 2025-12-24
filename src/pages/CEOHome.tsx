@@ -1,4 +1,4 @@
-// src/pages/CEOHome.tsx
+﻿// src/pages/CEOHome.tsx
 /**
  * PHASE 1 LOCK ?
  * - [LOCKED] Page renders without crashing
@@ -147,18 +147,18 @@ export default function CEOHome() {
   const flightModeLabel = flightMode === "LIVE" ? "Live Mode" : "Sim Mode";
   const flightModeDescription =
     flightMode === "LIVE"
-      ? "Live Mode requires confirmation + preflight before real-world actions."
+      ? "Live Mode is locked behind explicit confirmation and verified providers; real-world execution stays blocked until approved."
       : "Sim Mode is simulation-only with no real-world effects.";
   const teamSelectionLabel = teamSelection
     ? teamSelection === "solo"
-      ? "Solo Team"
+      ? "I'm working solo"
       : teamSelection === "join"
-        ? "Join a Team"
-        : "Create a Team"
+        ? "I'm working with a team"
+        : "I'm starting a team"
     : "Not selected";
   const intentSelectionLabel = intentSelection
     ? intentSelection === "explore"
-      ? "Explore / Learn"
+      ? "I'm exploring"
       : intentSelection === "pod"
         ? "Build or Join a Pod"
         : "I Own a Business"
@@ -359,48 +359,53 @@ export default function CEOHome() {
   const intentOptions: { id: PreflightIntent; title: string; description: string }[] = [
     {
       id: "explore",
-      title: "Explore / Learn",
-      description: "Guided walkthrough with simulation-only actions.",
+      title: "I'm exploring",
+      description: "Read-only walkthrough. Does not execute actions. Does not trigger Live Mode. Change anytime in Sim Mode.",
     },
     {
       id: "pod",
       title: "Build or Join a Pod",
-      description: "Configure pod roles, skills, and simulated revenue flow.",
+      description:
+        "Pod setup in preflight. Does not execute actions. Does not trigger Live Mode or outreach. Change anytime in Sim Mode.",
     },
     {
       id: "business",
       title: "I Own a Business",
-      description: "Continue onboarding and execution planning in preflight.",
+      description:
+        "Business onboarding in preflight. Does not execute actions. Does not trigger Live Mode. Change anytime in Sim Mode.",
     },
   ];
   const teamOptions: { id: TeamSelection; title: string; description: string }[] = [
     {
       id: "solo",
-      title: "Solo Team",
-      description: "You run the pod alone with clear task ownership.",
+      title: "I'm working solo",
+      description:
+        "You work alone. Does not execute actions or invite others. Does not trigger Live Mode. Change anytime in Sim Mode.",
     },
     {
       id: "join",
-      title: "Join a Team",
-      description: "Coordinate with an existing pod and shared ledger.",
+      title: "I'm working with a team",
+      description:
+        "Coordinate with an existing pod. Does not execute actions or notify others. Does not trigger Live Mode. Change anytime in Sim Mode.",
     },
     {
       id: "create",
-      title: "Create a Team",
-      description: "Start a new pod with roles and revenue share rules.",
+      title: "I'm starting a team",
+      description:
+        "Set up a new pod container. Does not execute actions or invite others. Does not trigger Live Mode. Change anytime in Sim Mode.",
     },
   ];
   const intentGuideMap: Record<PreflightIntent, { next: string; cta: string }> = {
     explore: {
-      next: "Review system health and run simulation-only actions.",
+      next: "Review system health and run simulation-only actions (no execution).",
       cta: "Run Simulation",
     },
     pod: {
-      next: "Pick a team path, review roles, and simulate revenue flow.",
+      next: "Pick a team path, review roles, and simulate revenue flow (no live execution).",
       cta: "Run Simulation",
     },
     business: {
-      next: "Finish onboarding, generate a plan, and run Do Next.",
+      next: "Finish onboarding, generate a plan, and run Do Next (simulation-first).",
       cta: "Generate CEO Plan",
     },
   };
@@ -697,6 +702,32 @@ export default function CEOHome() {
         <title>PipelinePRO - CEO</title>
       </Helmet>
 
+      <details
+        open
+        style={{
+          padding: "10px 12px",
+          borderRadius: 10,
+          border: "1px solid rgba(15,23,42,0.15)",
+          background: "rgba(15,23,42,0.04)",
+          color: "#0f172a",
+          marginBottom: 12,
+        }}
+        data-testid="test-mode-banner"
+      >
+        <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 12, listStyle: "none" }}>
+          Dismiss safety banner
+        </summary>
+        <div style={{ fontWeight: 800, marginTop: 6 }}>
+          Youâ€™re in TEST MODE. Nothing here affects the real world.
+        </div>
+        <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>
+          CEO Pilot dashboard. Buttons simulate or preview only; live execution requires explicit confirmation.
+        </div>
+        <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>
+          Nothing runs without you. You can pause anytime. This system explains itself.
+        </div>
+      </details>
+
       {showStandalonePreflightBanner && (
         <div
           style={{
@@ -707,13 +738,13 @@ export default function CEOHome() {
             color: "#92400e",
             fontWeight: 700,
             marginBottom: 12,
-          }}
-          data-testid="preflight-banner-standalone"
-        >
-          {flightMode === "LIVE"
-            ? "Live Mode - Confirmation + preflight required before real-world actions."
-            : "Sim Mode - Actions are simulated, not executed."}
-        </div>
+        }}
+        data-testid="preflight-banner-standalone"
+      >
+        {flightMode === "LIVE"
+          ? "Live Mode armed â€” real-world execution stays blocked until explicit confirmation and verified providers."
+          : "Sim Mode â€” actions are simulated; no real-world effects."}
+      </div>
       )}
 
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>{BRAND.ceo.headline}</h1>
@@ -764,9 +795,14 @@ export default function CEOHome() {
             }}
             data-testid="switch-mode"
           >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              Switch Mode <ModePill mode={flightMode} />
-            </span>
+            <div style={{ display: "grid", gap: 2 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                Switch Mode <ModePill mode={flightMode} />
+              </span>
+              <span style={{ fontSize: 11, opacity: 0.7 }}>
+                No execution. Reversible. Affects this workspace only.
+              </span>
+            </div>
           </button>
         </div>
         <div style={{ marginTop: 8, opacity: 0.85 }}>{getSystemModeDescription(systemMode)}</div>
@@ -846,9 +882,14 @@ export default function CEOHome() {
                 }}
                 data-testid="system-mode-apply"
               >
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  Apply mode <ModePill mode={flightMode} />
-                </span>
+                <div style={{ display: "grid", gap: 2 }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    Apply mode <ModePill mode={flightMode} />
+                  </span>
+                  <span style={{ fontSize: 11, opacity: 0.7 }}>
+                    No execution. Reversible. Affects this workspace only.
+                  </span>
+                </div>
               </button>
               <button
                 onClick={() => {
@@ -902,7 +943,8 @@ export default function CEOHome() {
           )}
         </div>
         <div style={{ opacity: 0.75, marginBottom: 10 }}>
-          Choose your intent so the dashboard stays safe, contextual, and simulation-first.
+          Choose your intent so the dashboard stays safe and contextual. This does not execute actions or trigger Live
+          Mode, and you can change it anytime in Sim Mode.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
           {intentOptions.map((option) => {
@@ -944,7 +986,8 @@ export default function CEOHome() {
       >
         <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6 }}>First-time path guide</div>
         <div style={{ opacity: 0.75, marginBottom: 10 }}>
-          Choose a path, see what happens next, and switch anytime. {flightModeLabel} means {flightModeDescription}
+          Choose a path, see what happens next, and switch anytime. Nothing auto-starts. {flightModeLabel} means{" "}
+          {flightModeDescription}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
           {intentOptions.map((option) => {
@@ -972,7 +1015,7 @@ export default function CEOHome() {
           })}
         </div>
         <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-          Safe return: change intent or team any time in Sim Mode; no live actions run without confirmation.
+          Safe return: change intent or team any time in Sim Mode; live execution never runs without explicit confirmation.
         </div>
       </div>
 
@@ -986,7 +1029,7 @@ export default function CEOHome() {
         }}
         data-testid="intent-team-flow"
       >
-        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 8 }}>Intent → Team → Business → Execution</div>
+        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 8 }}>Intent → Team → Business → Execution (read-only map)</div>
         <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
           <div>
             <span style={{ fontWeight: 700 }}>Intent:</span> {intentSelectionLabel}{" "}
@@ -1007,7 +1050,8 @@ export default function CEOHome() {
         </div>
         <div style={{ marginTop: 12, fontWeight: 800 }}>Team selection</div>
         <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>
-          Teams are coordination units, not hierarchy. Solo teams keep all tasks with you.
+          Teams are coordination units, not hierarchy. Selecting a path does not notify anyone or trigger Live Mode, and
+          you can change it anytime in Sim Mode.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 8 }}>
           {teamOptions.map((option) => {
@@ -1058,7 +1102,8 @@ export default function CEOHome() {
             flow, Fulfillment delivers.
           </div>
           <div>
-           <span style={{ fontWeight: 700 }}>Money flow:</span> Revenue → pod ledger → revenue share splits.
+            <span style={{ fontWeight: 700 }}>Money flow:</span> Revenue → pod ledger → revenue share splits (read-only
+            in Sim Mode).
           </div>
           <div>
             <span style={{ fontWeight: 700 }}>Leave safely:</span> Leaving pauses assignments; ledger remains intact.
@@ -1082,9 +1127,9 @@ export default function CEOHome() {
         <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6 }}>User test readiness</div>
         <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>5-step first-time walkthrough</div>
         <ol style={{ marginLeft: 18, marginBottom: 12 }}>
-          <li>Pick an intent (Explore, Pod, or Business) to set your path.</li>
-          <li>Select a team path (Solo, Join, or Create) and confirm responsibilities.</li>
-          <li>Review the mode banner: Sim Mode for safety, Live Mode only after preflight.</li>
+          <li>Pick an intent (I&apos;m exploring, Pod, or Business) to set your path.</li>
+          <li>Select a team path (I&apos;m working solo, I&apos;m working with a team, or I&apos;m starting a team).</li>
+          <li>Review the mode banner: Sim Mode for safety; Live Mode only after preflight.</li>
           <li>Complete onboarding and generate a CEO plan if you own a business.</li>
           <li>Run Do Next in Sim Mode, then review evidence and ledger snapshots.</li>
         </ol>
@@ -1104,6 +1149,23 @@ export default function CEOHome() {
               <li>Not a black box that executes without consent.</li>
               <li>Not a replacement for human judgment.</li>
             </ul>
+          </div>
+          <div style={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", padding: 12, background: "white" }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>How this works</div>
+            <ul style={{ marginLeft: 18, fontSize: 12 }}>
+              <li>
+                <span style={{ fontWeight: 700 }}>You:</span> choose intent and confirm every action.
+              </li>
+              <li>
+                <span style={{ fontWeight: 700 }}>Teams:</span> containers for coordination, not autonomous actors.
+              </li>
+              <li>
+                <span style={{ fontWeight: 700 }}>System:</span> never acts without explicit intent and confirmation.
+              </li>
+            </ul>
+            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+              Nothing runs without you. You can pause anytime. This system explains itself.
+            </div>
           </div>
         </div>
         <div style={{ marginTop: 12 }}>
@@ -1153,9 +1215,14 @@ export default function CEOHome() {
                 fontWeight: 700,
               }}
             >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                Run Simulation <ModePill mode={flightMode} />
-              </span>
+              <div style={{ display: "grid", gap: 2 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  Run Simulation <ModePill mode={flightMode} />
+                </span>
+                <span style={{ fontSize: 11, opacity: 0.7 }}>
+                  No execution now. Reversible. Affects this workspace only.
+                </span>
+              </div>
             </button>
             <button
               onClick={() => handleSimulationNote("Predicted outcome ready (simulation only).")}
@@ -1167,9 +1234,14 @@ export default function CEOHome() {
                 fontWeight: 700,
               }}
             >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                View Predicted Outcome <ModePill mode={flightMode} />
-              </span>
+              <div style={{ display: "grid", gap: 2 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  View Predicted Outcome <ModePill mode={flightMode} />
+                </span>
+                <span style={{ fontSize: 11, opacity: 0.7 }}>
+                  Read-only preview. Reversible. Affects this workspace only.
+                </span>
+              </div>
             </button>
             <button
               disabled
@@ -1182,9 +1254,14 @@ export default function CEOHome() {
                 opacity: 0.5,
               }}
             >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                Queue for Live Flight <ModePill mode={flightMode} />
-              </span>
+              <div style={{ display: "grid", gap: 2 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  Queue for Live Flight <ModePill mode={flightMode} />
+                </span>
+                <span style={{ fontSize: 11, opacity: 0.7 }}>
+                  Blocked in TEST MODE. No execution now. Reversible; affects real-world only after approval.
+                </span>
+              </div>
             </button>
           </div>
         </div>
@@ -1222,9 +1299,14 @@ export default function CEOHome() {
                 fontWeight: 700,
               }}
             >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                Run Simulation <ModePill mode={flightMode} />
-              </span>
+              <div style={{ display: "grid", gap: 2 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  Run Simulation <ModePill mode={flightMode} />
+                </span>
+                <span style={{ fontSize: 11, opacity: 0.7 }}>
+                  No execution now. Reversible. Affects this workspace only.
+                </span>
+              </div>
             </button>
             <button
               onClick={() => handleSimulationNote("Predicted pod outcome ready (simulation only).")}
@@ -1236,9 +1318,14 @@ export default function CEOHome() {
                 fontWeight: 700,
               }}
             >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                View Predicted Outcome <ModePill mode={flightMode} />
-              </span>
+              <div style={{ display: "grid", gap: 2 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  View Predicted Outcome <ModePill mode={flightMode} />
+                </span>
+                <span style={{ fontSize: 11, opacity: 0.7 }}>
+                  Read-only preview. Reversible. Affects this workspace only.
+                </span>
+              </div>
             </button>
             <button
               disabled
@@ -1251,9 +1338,14 @@ export default function CEOHome() {
                 opacity: 0.5,
               }}
             >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                Queue for Live Flight <ModePill mode={flightMode} />
-              </span>
+              <div style={{ display: "grid", gap: 2 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  Queue for Live Flight <ModePill mode={flightMode} />
+                </span>
+                <span style={{ fontSize: 11, opacity: 0.7 }}>
+                  Blocked in TEST MODE. No execution now. Reversible; affects real-world only after approval.
+                </span>
+              </div>
             </button>
           </div>
         </div>
@@ -1272,9 +1364,9 @@ export default function CEOHome() {
         }}
         data-testid="business-preflight-banner"
       >
-          {flightMode === "LIVE"
-            ? "Live Mode selected - confirmations required before real-world actions."
-            : "Preflight only - business actions are simulated until Live Mode requirements are met."}
+        {flightMode === "LIVE"
+          ? "Live Mode armed — real-world execution stays blocked until explicit confirmation and verified providers."
+          : "Preflight only — business actions are simulated until Live Mode requirements are met."}
       </div>
       )}
 
@@ -1370,12 +1462,42 @@ export default function CEOHome() {
                 <span style={{ fontWeight: 700 }}>Live Flight</span>
               </label>
               <div style={{ fontSize: 12, opacity: 0.7 }}>
-                Live Flight requires verified providers and approvals.
+                Live Flight is locked until verified providers and explicit approvals.
               </div>
             </StatusCard>
           )}
 
-          <StatusCard title="Ledger Snapshot" testId="ceo-ledger-snapshot">
+          <StatusCard title="Decision Visibility (Read-only)" testId="ceo-decision-visibility">
+            {latestLedgerEntry ? (
+              <>
+                <div>
+                  <span style={{ fontWeight: 700 }}>Intent:</span>{" "}
+                  {latestLedgerEntry.action.intent_id || "intent:unknown"}
+                </div>
+                <div>
+                  <span style={{ fontWeight: 700 }}>Status:</span> {latestLedgerEntry.outcome.type}
+                </div>
+                <div>
+                  <span style={{ fontWeight: 700 }}>Reason:</span>{" "}
+                  {flightMode === "LIVE"
+                    ? "Live Mode — policy + consent gates; explicit confirmation required."
+                    : "TEST MODE — policy checks only; consent/evidence are simulated."}
+                </div>
+                <div>
+                  <span style={{ fontWeight: 700 }}>Evidence:</span> {latestLedgerEntry.evidence_ref.status} -{" "}
+                  {latestLedgerEntry.evidence_ref.request_hash}{" "}
+                  <span style={{ opacity: 0.6 }}>{flightMode === "LIVE" ? "(provider)" : "(mock)"}</span>
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  Read-only log; reviewing decisions never executes actions.
+                </div>
+              </>
+            ) : (
+              <div style={{ opacity: 0.7 }}>No decisions yet. Read-only until a simulated action is logged.</div>
+            )}
+          </StatusCard>
+
+          <StatusCard title="Ledger Snapshot (read-only)" testId="ceo-ledger-snapshot">
             {ledgerDisplay.length === 0 && <div style={{ opacity: 0.7 }}>No ledger entries yet.</div>}
             {ledgerDisplay.length > 0 && (
               <div style={{ display: "grid", gap: 4 }}>
@@ -1633,9 +1755,14 @@ export default function CEOHome() {
                   opacity: agentLoading || planLoading ? 0.6 : 1,
                 }}
               >
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  {plan ? "Regenerate" : "Generate CEO Plan"} <ModePill mode={flightMode} />
-                </span>
+                <div style={{ display: "grid", gap: 2 }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {plan ? "Regenerate" : "Generate CEO Plan"} <ModePill mode={flightMode} />
+                  </span>
+                  <span style={{ fontSize: 11, opacity: 0.7 }}>
+                    Draft only. No execution now. Reversible. Affects this workspace only.
+                  </span>
+                </div>
               </button>
             </div>
           </div>
@@ -1691,9 +1818,14 @@ export default function CEOHome() {
                   opacity: dailyBriefLoading || agentLoading ? 0.6 : 1,
                 }}
               >
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  {dailyBrief ? "Regenerate" : "Generate Daily Brief"} <ModePill mode={flightMode} />
-                </span>
+                <div style={{ display: "grid", gap: 2 }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {dailyBrief ? "Regenerate" : "Generate Daily Brief"} <ModePill mode={flightMode} />
+                  </span>
+                  <span style={{ fontSize: 11, opacity: 0.7 }}>
+                    Read-only brief. No execution now. Reversible. Affects this workspace only.
+                  </span>
+                </div>
               </button>
             </div>
           </div>
@@ -1811,9 +1943,14 @@ export default function CEOHome() {
                 opacity: !nextTask || doNextLoading || agentLoading || systemMode !== SystemMode.EXECUTION ? 0.6 : 1,
               }}
             >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                {nextTask ? "Do Next" : "All tasks complete"} <ModePill mode={flightMode} />
-              </span>
+              <div style={{ display: "grid", gap: 2 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {nextTask ? "Do Next" : "All tasks complete"} <ModePill mode={flightMode} />
+                </span>
+                <span style={{ fontSize: 11, opacity: 0.7 }}>
+                  Guidance only. No execution now. Reversible. Affects this workspace only.
+                </span>
+              </div>
             </button>
           </div>
           {actionPlan && (
@@ -1893,13 +2030,26 @@ export default function CEOHome() {
               <div style={{ fontWeight: 800, marginBottom: 6 }}>Action Pipeline</div>
               <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
                 <div>
+                  <span style={{ fontWeight: 700 }}>Intent:</span>{" "}
+                  {lastPipelineResult.ledgerEntry.action.intent_id || "intent:unknown"}
+                </div>
+                <div>
                   <span style={{ fontWeight: 700 }}>Status:</span> {lastPipelineResult.outcome.type}
+                </div>
+                <div>
+                  <span style={{ fontWeight: 700 }}>Reason:</span>{" "}
+                  {flightMode === "LIVE"
+                    ? "Live Mode — policy + consent gates; explicit confirmation required."
+                    : "TEST MODE — policy checks only; consent/evidence are simulated."}
                 </div>
                 <div>
                   <span style={{ fontWeight: 700 }}>Evidence:</span> {lastPipelineResult.proof.evidence_ref.status}
                   {lastPipelineResult.proof.evidence_ref.request_hash
                     ? ` - ${lastPipelineResult.proof.evidence_ref.request_hash}`
                     : ""}
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  Read-only pipeline snapshot; no action executes from this panel.
                 </div>
               </div>
             </div>
@@ -1918,7 +2068,7 @@ export default function CEOHome() {
               }}
               data-testid="do-next-history-toggle"
             >
-              Do Next History ({doNextHistory.length})
+              Do Next Log (read-only) ({doNextHistory.length})
             </button>
             {historyOpen && (
               <div
@@ -1931,6 +2081,9 @@ export default function CEOHome() {
                 }}
                 data-testid="do-next-history-list"
               >
+                <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
+                  Read-only log; selecting an entry only previews what happened.
+                </div>
                 {doNextHistory.length === 0 && <div style={{ opacity: 0.7 }}>No history yet.</div>}
                 {doNextHistory.length > 0 && (
                   <div style={{ display: "grid", gap: 6 }}>
@@ -1991,9 +2144,14 @@ export default function CEOHome() {
               fontWeight: 700,
             }}
           >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              Pause operations <ModePill mode={flightMode} />
-            </span>
+            <div style={{ display: "grid", gap: 2 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                Pause operations <ModePill mode={flightMode} />
+              </span>
+              <span style={{ fontSize: 11, opacity: 0.7 }}>
+                No execution now. Reversible. Affects this pod only.
+              </span>
+            </div>
           </button>
           <button
             onClick={handleReturnToSim}
@@ -2005,9 +2163,14 @@ export default function CEOHome() {
               fontWeight: 700,
             }}
           >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              Return to Sim Mode <ModePill mode={flightMode} />
-            </span>
+            <div style={{ display: "grid", gap: 2 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                Return to Sim Mode <ModePill mode={flightMode} />
+              </span>
+              <span style={{ fontSize: 11, opacity: 0.7 }}>
+                No execution now. Reversible. Affects this workspace only.
+              </span>
+            </div>
           </button>
           <button
             onClick={handleLeaveTeam}
@@ -2019,9 +2182,14 @@ export default function CEOHome() {
               fontWeight: 700,
             }}
           >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              Leave team <ModePill mode={flightMode} />
-            </span>
+            <div style={{ display: "grid", gap: 2 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                Leave team <ModePill mode={flightMode} />
+              </span>
+              <span style={{ fontSize: 11, opacity: 0.7 }}>
+                No execution now. Reversible. Affects only your team access.
+              </span>
+            </div>
           </button>
           <button
             onClick={handleArchiveBusiness}
@@ -2033,9 +2201,14 @@ export default function CEOHome() {
               fontWeight: 700,
             }}
           >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              Archive business <ModePill mode={flightMode} />
-            </span>
+            <div style={{ display: "grid", gap: 2 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                Archive business <ModePill mode={flightMode} />
+              </span>
+              <span style={{ fontSize: 11, opacity: 0.7 }}>
+                Simulation only. Reversible. Affects this workspace only.
+              </span>
+            </div>
           </button>
           <button
             onClick={handleDownloadRecords}
@@ -2047,9 +2220,14 @@ export default function CEOHome() {
               fontWeight: 700,
             }}
           >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              Download records <ModePill mode={flightMode} />
-            </span>
+            <div style={{ display: "grid", gap: 2 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                Download records <ModePill mode={flightMode} />
+              </span>
+              <span style={{ fontSize: 11, opacity: 0.7 }}>
+                Read-only export. Reversible. Affects this workspace only.
+              </span>
+            </div>
           </button>
         </div>
         {exitNotice && (
@@ -2215,4 +2393,6 @@ const ModePill = ({ mode }: { mode: FlightMode }) => (
     {mode}
   </span>
 );
+
+
 
