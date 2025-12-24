@@ -6,7 +6,7 @@
  * - [TODO-P2] Mount CEO agent chat + onboarding panels once Phase 1 stable
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
@@ -34,6 +34,10 @@ import { executed, halted, summarizeOutcome, transformed } from "@/lib/decisionO
 import { ensureOutcome } from "@/lib/loopGuard";
 import { computeIdentityKey } from "@/lib/spine";
 import { runPipelineStep, type PipelineResult } from "@/lib/revenueKernel/pipeline";
+import { loadRevenueLedgerTail, type RevenueLedgerEntry } from "@/lib/revenueKernel/ledger";
+import { evaluateCoolingState, getCoolingState } from "@/lib/revenueKernel/cooling";
+import { getCapacityState, type CapacityState } from "@/lib/revenueKernel/capacityLedger";
+import { getOpportunityQueue, getOpportunityQueueConfig } from "@/lib/revenueKernel/opportunityQueue";
 import { computeActionId, type ActionSpec } from "@/types/actions";
 import {
   computePlanHash,
@@ -43,6 +47,12 @@ import {
   saveDailyBrief,
 } from "@/lib/ceoDailyBrief";
 import { getSystemModeDescription, loadSystemMode, saveSystemMode, SystemMode } from "@/lib/systemMode";
+import { buildMaintenanceReport, type MaintenanceReport } from "@/lib/maintenanceBot";
+import { loadThreadStoreState } from "@/lib/lifelongThreadsStorage";
+import { getLatestSnapshot, getThreadSummary, type ThreadSnapshotSummaryFields } from "@/lib/lifelongThreads";
+import { ActionImpact } from "@/lib/irreversibilityMap";
+import { appendManualOverrideEvent, loadManualOverrideHistory, type ManualOverrideEvent } from "@/lib/manualOverrideLedger";
+import { derivePodState, loadPodLedger, type PodStateSnapshot } from "@/lib/pods";
 
 export default function CEOHome() {
   const { email, role, signOut, userId } = useAuth();
@@ -74,6 +84,23 @@ export default function CEOHome() {
   );
   const [dailyBrief, setDailyBrief] = useState<DailyBriefState | null>(null);
   const [dailyBriefLoading, setDailyBriefLoading] = useState(false);
+  const [revenueLedgerEntries, setRevenueLedgerEntries] = useState<RevenueLedgerEntry[]>([]);
+  const [revenueLedgerCursor, setRevenueLedgerCursor] = useState<string | null>(null);
+  const [capacityState, setCapacityState] = useState<CapacityState | null>(null);
+  const [coolingSummary, setCoolingSummary] = useState<{ state: string; reason: string | null } | null>(null);
+  const [opportunitySummary, setOpportunitySummary] = useState<{ size: number; max: number } | null>(null);
+  const [podSnapshot, setPodSnapshot] = useState<PodStateSnapshot | null>(null);
+  const [threadSummary, setThreadSummary] = useState<{
+    threadId: string;
+    summary: ThreadSnapshotSummaryFields;
+    snapshotDigest: string | null;
+  } | null>(null);
+  const [maintenanceReport, setMaintenanceReport] = useState<MaintenanceReport | null>(null);
+  const [manualOverrideHistory, setManualOverrideHistory] = useState<ManualOverrideEvent[]>([]);
+  const [manualOverrideReason, setManualOverrideReason] = useState("");
+  const [manualOverrideImpact, setManualOverrideImpact] = useState<ActionImpact>(ActionImpact.REVERSIBLE);
+  const [manualOverrideConfirm, setManualOverrideConfirm] = useState("");
+  const [manualOverrideStatus, setManualOverrideStatus] = useState<string | null>(null);
 
   const hasContext =
     !!context.businessName ||
@@ -136,6 +163,61 @@ export default function CEOHome() {
     }
   }, [plan]);
 
+  const refreshStatus = useCallback(() => {
+    if (!identityKey) return;
+    const ledgerPage = loadRevenueLedgerTail(identityKey, 5);
+    setRevenueLedgerEntries(ledgerPage.entries);
+    setRevenueLedgerCursor(ledgerPage.nextCursor);
+
+    const pods = derivePodState(identityKey, loadPodLedger(identityKey));
+    setPodSnapshot(pods);
+
+    setManualOverrideHistory(loadManualOverrideHistory(identityKey, 5));
+
+    const capacity = getCapacityState(identityKey).state;
+    setCapacityState(capacity);
+
+    const coolingWindowId = "window:default";
+    const cooling = getCoolingState(identityKey, coolingWindowId);
+    const coolingEval = evaluateCoolingState(cooling.state);
+    setCoolingSummary({ state: cooling.state.cooling_state, reason: coolingEval.reason ?? null });
+
+    const opportunityConfig = getOpportunityQueueConfig();
+    const opportunityQueue = getOpportunityQueue(identityKey);
+    setOpportunitySummary({ size: opportunityQueue.entries.length, max: opportunityConfig.max_size });
+
+    const threadState = loadThreadStoreState(userId, email);
+    const latestThread = threadState.threads[threadState.threads.length - 1];
+    if (latestThread) {
+      const snapshot = getLatestSnapshot(threadState.snapshots, latestThread.thread_id);
+      const summary = getThreadSummary(latestThread.thread_id, threadState.entries, snapshot);
+      setThreadSummary({
+        threadId: latestThread.thread_id,
+        summary,
+        snapshotDigest: snapshot?.digest ?? null,
+      });
+    } else {
+      setThreadSummary(null);
+    }
+
+    const latestTimestamp = ledgerPage.entries[ledgerPage.entries.length - 1]?.timestamp ?? "s0";
+    const report = buildMaintenanceReport({
+      featureName: "ceo_home",
+      timestamp: latestTimestamp,
+      declaredOptimizationTargets: [],
+      intentsPresent: true,
+      appendOnlyPreserved: true,
+      requiresHumanApprovalForR3: true,
+      mockMode: isMockMode,
+      allowIntentlessInMock: true,
+    });
+    setMaintenanceReport(report);
+  }, [identityKey, userId, email, isMockMode]);
+
+  useEffect(() => {
+    refreshStatus();
+  }, [refreshStatus, lastPipelineResult, doNextHistory.length]);
+
   const handleGeneratePlan = async () => {
     setPlanLoading(true);
     try {
@@ -192,6 +274,21 @@ export default function CEOHome() {
   const incompleteItems = checklist.filter((item) => !checklistState.completedIds.includes(item.id));
   const todaysTop3 = incompleteItems.slice(0, 3);
   const nextTask = incompleteItems[0];
+  const ledgerDisplay = useMemo(
+    () => [...revenueLedgerEntries].slice().reverse(),
+    [revenueLedgerEntries]
+  );
+  const latestLedgerEntry = ledgerDisplay[0] ?? null;
+  const stalledPipelines = useMemo(
+    () =>
+      ledgerDisplay.filter((entry) =>
+        ["blocked", "deferred", "retry", "halted"].includes(entry.outcome.type)
+      ).length,
+    [ledgerDisplay]
+  );
+  const overrideIsIrreversible = manualOverrideImpact === ActionImpact.IRREVERSIBLE;
+  const overrideNeedsConfirm = manualOverrideConfirm.trim().toUpperCase() === "OVERRIDE";
+  const overrideCanSubmit = manualOverrideReason.trim().length > 0 && overrideNeedsConfirm;
 
   const buildDoNextOutcome = (raw: string, payload: DoNextPayload | null) => {
     if (payload) {
@@ -385,6 +482,32 @@ export default function CEOHome() {
     }
   };
 
+  const handleLoadMoreLedger = () => {
+    if (!revenueLedgerCursor) return;
+    const nextPage = loadRevenueLedgerTail(identityKey, 5, revenueLedgerCursor);
+    setRevenueLedgerEntries((prev) => [...nextPage.entries, ...prev]);
+    setRevenueLedgerCursor(nextPage.nextCursor);
+  };
+
+  const handleManualOverrideSubmit = () => {
+    setManualOverrideStatus(null);
+    if (!overrideCanSubmit) {
+      setManualOverrideStatus("Confirmation phrase or reason missing.");
+      return;
+    }
+    const entry = appendManualOverrideEvent(identityKey, {
+      actor_id: identityKey,
+      reason: manualOverrideReason.trim(),
+      action_impact: manualOverrideImpact,
+      confirmation: "CONFIRMED",
+      action_key: "manual_override",
+    });
+    setManualOverrideReason("");
+    setManualOverrideConfirm("");
+    setManualOverrideStatus(`Override logged: ${entry.override_id}`);
+    refreshStatus();
+  };
+
   const handleSelectHistory = (entry: DoNextHistoryEntry) => {
     const selected: DoNextState = {
       taskId: entry.checklistItemId,
@@ -553,6 +676,235 @@ export default function CEOHome() {
             </div>
           </div>
         )}
+      </div>
+
+      <div
+        style={{
+          padding: 16,
+          borderRadius: 12,
+          border: "1px solid rgba(0,0,0,0.1)",
+          background: "rgba(0,0,0,0.02)",
+          marginBottom: 16,
+        }}
+        data-testid="ceo-status-overview"
+      >
+        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 8 }}>System Health</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12 }}>
+          <StatusCard title="Active Pipelines" testId="ceo-active-pipelines">
+            <div>
+              <span style={{ fontWeight: 700 }}>Active load:</span>{" "}
+              {capacityState ? `${capacityState.active_load}/${capacityState.max_concurrent_actions}` : "n/a"}
+            </div>
+            <div>
+              <span style={{ fontWeight: 700 }}>Latest action:</span>{" "}
+              {latestLedgerEntry
+                ? `${latestLedgerEntry.action.action_type} - ${latestLedgerEntry.outcome.type}`
+                : "No pipeline actions yet"}
+            </div>
+            <div>
+              <span style={{ fontWeight: 700 }}>Stalled:</span> {stalledPipelines}
+            </div>
+          </StatusCard>
+
+          <StatusCard title="Pods & Roles" testId="ceo-pods">
+            <div>
+              <span style={{ fontWeight: 700 }}>Primary pod:</span>{" "}
+              {podSnapshot?.pods[0]?.pod_id || identityKey}
+            </div>
+            <div>
+              <span style={{ fontWeight: 700 }}>Role:</span> {role || "unknown"}
+            </div>
+            <div>
+              <span style={{ fontWeight: 700 }}>Revenue share:</span>{" "}
+              {podSnapshot?.pods[0]?.revenue_share != null
+                ? `${Math.round(podSnapshot.pods[0].revenue_share * 100)}%`
+                : "100%"}
+            </div>
+            <div>
+              <span style={{ fontWeight: 700 }}>Status:</span> {podSnapshot?.pods[0]?.status || "active"}
+            </div>
+          </StatusCard>
+
+          <StatusCard title="Risk / Cooldown" testId="ceo-risk-cooldown">
+            <div>
+              <span style={{ fontWeight: 700 }}>Cooling:</span>{" "}
+              {coolingSummary ? coolingSummary.state : "normal"}
+              {coolingSummary?.reason ? ` (${coolingSummary.reason})` : ""}
+            </div>
+            <div>
+              <span style={{ fontWeight: 700 }}>Opportunity queue:</span>{" "}
+              {opportunitySummary ? `${opportunitySummary.size}/${opportunitySummary.max}` : "0/0"}
+            </div>
+            <div>
+              <span style={{ fontWeight: 700 }}>Capacity load:</span>{" "}
+              {capacityState ? capacityState.active_load : 0}
+            </div>
+          </StatusCard>
+
+          <StatusCard title="Maintenance Bot" testId="ceo-maintenance-report">
+            <div>
+              <span style={{ fontWeight: 700 }}>Drift score:</span>{" "}
+              {maintenanceReport ? maintenanceReport.drift_score.score : 100}
+            </div>
+            <div>
+              <span style={{ fontWeight: 700 }}>Violations:</span>{" "}
+              {maintenanceReport ? maintenanceReport.invariant_violations.length : 0}
+            </div>
+            <div>
+              <span style={{ fontWeight: 700 }}>Warnings:</span>{" "}
+              {maintenanceReport ? maintenanceReport.warnings.length : 0}
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>
+              Advisory only; cannot execute revenue actions.
+            </div>
+          </StatusCard>
+
+          <StatusCard title="Ledger Snapshot" testId="ceo-ledger-snapshot">
+            {ledgerDisplay.length === 0 && <div style={{ opacity: 0.7 }}>No ledger entries yet.</div>}
+            {ledgerDisplay.length > 0 && (
+              <div style={{ display: "grid", gap: 4 }}>
+                {ledgerDisplay.slice(0, 3).map((entry) => (
+                  <div key={entry.entry_id}>
+                    <span style={{ fontWeight: 700 }}>{entry.action.action_type}</span>{" "}
+                    <span style={{ opacity: 0.7 }}>({entry.outcome.type})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={handleLoadMoreLedger}
+              disabled={!revenueLedgerCursor}
+              style={{
+                marginTop: 8,
+                padding: "6px 10px",
+                borderRadius: 8,
+                border: "1px solid rgba(0,0,0,0.15)",
+                cursor: revenueLedgerCursor ? "pointer" : "not-allowed",
+                fontWeight: 700,
+                opacity: revenueLedgerCursor ? 1 : 0.5,
+              }}
+            >
+              Load older ledger entries
+            </button>
+          </StatusCard>
+
+          <StatusCard title="Thread Snapshot" testId="ceo-thread-snapshot">
+            {threadSummary ? (
+              <div style={{ display: "grid", gap: 4 }}>
+                <div>
+                  <span style={{ fontWeight: 700 }}>Thread:</span> {threadSummary.threadId}
+                </div>
+                <div>
+                  <span style={{ fontWeight: 700 }}>Entries:</span> {threadSummary.summary.entry_count}
+                </div>
+                <div>
+                  <span style={{ fontWeight: 700 }}>Last updated:</span> {threadSummary.summary.last_updated}
+                </div>
+                <div>
+                  <span style={{ fontWeight: 700 }}>Snapshot:</span>{" "}
+                  {threadSummary.snapshotDigest || "none"}
+                </div>
+              </div>
+            ) : (
+              <div style={{ opacity: 0.7 }}>No thread snapshots yet.</div>
+            )}
+          </StatusCard>
+        </div>
+      </div>
+
+      <div
+        style={{
+          padding: 16,
+          borderRadius: 12,
+          border: "1px solid rgba(0,0,0,0.1)",
+          background: "rgba(0,0,0,0.02)",
+          marginBottom: 16,
+        }}
+        data-testid="manual-override-card"
+      >
+        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 8 }}>Manual Override (human-confirmed)</div>
+        <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>
+          Overrides require a reason, typed confirmation, and are logged immutably.
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          <label style={{ display: "grid", gap: 4 }}>
+            <span style={{ fontWeight: 700 }}>Impact classification</span>
+            <select
+              value={manualOverrideImpact}
+              onChange={(e) => setManualOverrideImpact(e.target.value as ActionImpact)}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid rgba(0,0,0,0.15)",
+              }}
+            >
+              <option value={ActionImpact.REVERSIBLE}>Reversible</option>
+              <option value={ActionImpact.DIFFICULT_TO_REVERSE}>Difficult to reverse</option>
+              <option value={ActionImpact.IRREVERSIBLE}>Irreversible</option>
+            </select>
+          </label>
+          {overrideIsIrreversible && (
+            <div style={{ padding: 8, borderRadius: 8, background: "#fee2e2", color: "#991b1b", fontWeight: 700 }}>
+              Irreversible override selected. Proceed only with explicit human approval and rationale.
+            </div>
+          )}
+          <label style={{ display: "grid", gap: 4 }}>
+            <span style={{ fontWeight: 700 }}>Reason (required)</span>
+            <textarea
+              value={manualOverrideReason}
+              onChange={(e) => setManualOverrideReason(e.target.value)}
+              rows={3}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid rgba(0,0,0,0.15)",
+                resize: "vertical",
+              }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 4 }}>
+            <span style={{ fontWeight: 700 }}>Type OVERRIDE to confirm</span>
+            <input
+              value={manualOverrideConfirm}
+              onChange={(e) => setManualOverrideConfirm(e.target.value)}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid rgba(0,0,0,0.15)",
+              }}
+            />
+          </label>
+          <button
+            onClick={handleManualOverrideSubmit}
+            disabled={!overrideCanSubmit}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid rgba(0,0,0,0.15)",
+              cursor: overrideCanSubmit ? "pointer" : "not-allowed",
+              fontWeight: 700,
+              opacity: overrideCanSubmit ? 1 : 0.6,
+            }}
+          >
+            Log manual override
+          </button>
+          {manualOverrideStatus && (
+            <div style={{ padding: 8, borderRadius: 8, background: "#ecfccb", color: "#365314", fontWeight: 700 }}>
+              {manualOverrideStatus}
+            </div>
+          )}
+          <div style={{ fontWeight: 700 }}>Recent overrides</div>
+          {manualOverrideHistory.length === 0 && <div style={{ opacity: 0.7 }}>No overrides logged.</div>}
+          {manualOverrideHistory.length > 0 && (
+            <div style={{ display: "grid", gap: 4 }}>
+              {manualOverrideHistory.map((entry) => (
+                <div key={entry.override_id} style={{ fontSize: 12 }}>
+                  <span style={{ fontWeight: 700 }}>{entry.action_impact}</span> - {entry.reason}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {status === "in_progress" && (
@@ -1049,6 +1401,30 @@ const getMockPlanMarkdown = () =>
     "2. Set up two ad groups with $50/day budget",
     "3. Send follow-up emails to warm leads and book calls",
   ].join("\n");
+
+const StatusCard = ({
+  title,
+  children,
+  testId,
+}: {
+  title: string;
+  children: React.ReactNode;
+  testId?: string;
+}) => (
+  <div
+    style={{
+      padding: 12,
+      borderRadius: 10,
+      border: "1px solid rgba(0,0,0,0.08)",
+      background: "white",
+      minHeight: 120,
+    }}
+    data-testid={testId}
+  >
+    <div style={{ fontWeight: 800, marginBottom: 6 }}>{title}</div>
+    <div style={{ display: "grid", gap: 4, fontSize: 13 }}>{children}</div>
+  </div>
+);
 
 const ContextField = ({ label, value }: { label: string; value?: string }) => (
   <div

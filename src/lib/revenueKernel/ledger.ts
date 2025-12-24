@@ -83,3 +83,28 @@ export const loadRevenueLedgerPage = (
     return { entries: [], nextCursor: null };
   }
 };
+
+export const loadRevenueLedgerTail = (
+  identity: string,
+  limit: number,
+  cursor?: string | null,
+  storage?: StorageLike
+): { entries: RevenueLedgerEntry[]; nextCursor: string | null } => {
+  const resolved = resolveStorage(storage);
+  if (!resolved) return { entries: [], nextCursor: null };
+  try {
+    const raw = resolved.getItem(ledgerKey(identity));
+    const parsed = raw ? (JSON.parse(raw) as RevenueLedgerEntry[]) : [];
+    const entries = Array.isArray(parsed) ? parsed : [];
+    if (entries.length === 0) return { entries: [], nextCursor: null };
+
+    const endIndex = cursor ? entries.findIndex((entry) => entry.entry_id === cursor) : entries.length;
+    const safeEnd = endIndex > 0 ? endIndex : entries.length;
+    const startIndex = Math.max(0, safeEnd - limit);
+    const page = entries.slice(startIndex, safeEnd);
+    const nextCursor = startIndex > 0 ? entries[startIndex - 1]?.entry_id ?? null : null;
+    return { entries: page, nextCursor };
+  } catch {
+    return { entries: [], nextCursor: null };
+  }
+};
