@@ -1056,7 +1056,7 @@ export default function CEOHome() {
             flow, Fulfillment delivers.
           </div>
           <div>
-            <span style={{ fontWeight: 700 }}>Money flow:</span> Revenue -> pod ledger -> revenue share splits.
+           <span style={{ fontWeight: 700 }}>Money flow:</span> Revenue → pod ledger → revenue share splits.
           </div>
           <div>
             <span style={{ fontWeight: 700 }}>Leave safely:</span> Leaving pauses assignments; ledger remains intact.
