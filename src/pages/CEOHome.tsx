@@ -62,6 +62,7 @@ import {
 } from "@/lib/preflightIntent";
 import { loadFlightMode, type FlightMode } from "@/lib/flightMode";
 import { clearPreflightTeam, loadPreflightTeam, savePreflightTeam, type TeamSelection } from "@/lib/preflightTeam";
+import { BRAND } from "@/config/brand";
 
 export default function CEOHome() {
   const { email, role, signOut, userId } = useAuth();
@@ -715,7 +716,8 @@ export default function CEOHome() {
         </div>
       )}
 
-      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>CEO Home</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>{BRAND.ceo.headline}</h1>
+      <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 6 }}>{BRAND.ceo.subline}</div>
       <div style={{ opacity: 0.8, marginBottom: 16 }}>
         Signed in as <b>{email ?? "unknown"}</b> - role: <b>{role}</b>
       </div>
@@ -2213,5 +2215,4 @@ const ModePill = ({ mode }: { mode: FlightMode }) => (
     {mode}
   </span>
 );
-
 

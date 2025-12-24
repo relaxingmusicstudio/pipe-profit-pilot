@@ -30,6 +30,7 @@ const Header = () => {
           </div>
           <span className="text-xl font-bold text-primary-foreground">
             Apex<span className="text-accent">Local</span>360
+            <span className="mt-0.5 block text-xs font-medium text-primary-foreground/70">Search Pilot</span>
           </span>
         </Link>
 

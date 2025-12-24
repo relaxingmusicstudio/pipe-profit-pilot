@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Rocket, ArrowRight, CheckCircle2 } from "lucide-react";
+import { BRAND } from "@/config/brand";
 
 interface OnboardingCardProps {
   currentStep: number;
@@ -42,10 +43,10 @@ export function OnboardingCard({
             </div>
             <div className="min-w-0">
               <h2 className="text-lg font-semibold text-foreground">
-                Welcome! Let's set up your Command Center
+                {BRAND.ceo.headline}
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Answer a few quick questions so your AI CEO can start helping you run your business.
+                {BRAND.ceo.subline} Answer a few quick questions so your AI CEO can start helping you run your business.
               </p>
             </div>
           </div>
