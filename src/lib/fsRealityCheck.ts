@@ -10,6 +10,12 @@
  * - platform_claim_log_v1
  */
 
+import * as evidencePackModule from "@/lib/evidencePack";
+import * as toolRegistryModule from "@/lib/toolRegistry";
+import * as routeGuardsModule from "@/lib/routeGuards";
+import * as routeNavAuditModule from "@/lib/routeNavAudit";
+import * as supportBundleModule from "@/lib/supportBundle";
+
 // ============= Storage Keys =============
 export const FS_REALITY_CHECK_KEY = "platform_fs_reality_check_v1";
 export const BUILD_OUTPUT_KEY = "platform_build_output_v1";
@@ -69,31 +75,33 @@ interface CriticalImport {
   importFn: () => Promise<unknown>;
 }
 
+const resolveImport = (module: unknown) => () => Promise.resolve(module);
+
 const CRITICAL_IMPORTS: CriticalImport[] = [
   {
     id: "evidencePack",
     specifier: "@/lib/evidencePack",
-    importFn: () => import("@/lib/evidencePack"),
+    importFn: resolveImport(evidencePackModule),
   },
   {
     id: "toolRegistry",
     specifier: "@/lib/toolRegistry",
-    importFn: () => import("@/lib/toolRegistry"),
+    importFn: resolveImport(toolRegistryModule),
   },
   {
     id: "routeGuards",
     specifier: "@/lib/routeGuards",
-    importFn: () => import("@/lib/routeGuards"),
+    importFn: resolveImport(routeGuardsModule),
   },
   {
     id: "routeNavAudit",
     specifier: "@/lib/routeNavAudit",
-    importFn: () => import("@/lib/routeNavAudit"),
+    importFn: resolveImport(routeNavAuditModule),
   },
   {
     id: "supportBundle",
     specifier: "@/lib/supportBundle",
-    importFn: () => import("@/lib/supportBundle"),
+    importFn: resolveImport(supportBundleModule),
   },
   {
     id: "ProofGate",

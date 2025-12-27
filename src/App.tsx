@@ -1,3 +1,4 @@
+import { Suspense, lazy, useEffect, useState } from "react";
 import { HelmetProvider } from "react-helmet-async";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -8,7 +9,6 @@ import { VisitorProvider } from "@/contexts/VisitorContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AuthRouter from "@/components/AuthRouter";
 import AppLayout from "@/components/AppLayout";
-import ErrorBoundary from "@/components/ErrorBoundary";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import CookieConsentBanner from "@/components/CookieConsentBanner";
 import EnhancedTrackingConsent from "@/components/EnhancedTrackingConsent";
@@ -58,20 +58,21 @@ import AdminTenants from "./pages/AdminTenants";
 import QATests from "./pages/QATests";
 import SchedulerControl from "./pages/platform/SchedulerControl";
 import SchedulerDocs from "./pages/platform/SchedulerDocs";
-import ProofGate from "./pages/platform/ProofGate";
 import CloudWizard from "./pages/platform/CloudWizard";
 import EdgeConsole from "./pages/platform/EdgeConsole";
 import DbDoctor from "./pages/platform/DbDoctor";
 import Access from "./pages/platform/Access";
-import ToolsHub from "./pages/platform/ToolsHub";
 import FeatureFlags from "./pages/platform/FeatureFlags";
 import SchemaSnapshot from "./pages/platform/SchemaSnapshot";
 import PlaceholderScan from "./pages/platform/PlaceholderScan";
-import RouteNavAuditor from "./pages/platform/RouteNavAuditor";
 import OpsCenter from "./pages/platform/OpsCenter";
 import VibesInspector from "./pages/platform/VibesInspector";
 import OpsHub from "./pages/OpsHub";
 import SetupWizard from "./pages/SetupWizard";
+
+const ProofGate = lazy(() => import("./pages/platform/ProofGate"));
+const ToolsHub = lazy(() => import("./pages/platform/ToolsHub"));
+const RouteNavAuditor = lazy(() => import("./pages/platform/RouteNavAuditor"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -82,6 +83,12 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+const routeFallback = (
+  <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+    Loading...
+  </div>
+);
 
 /**
  * App routing structure:
@@ -100,8 +107,14 @@ const queryClient = new QueryClient({
  * /admin/* routes redirect to /app/* (legacy support)
  * /platform/* routes are for platform admins only
  */
-const App = () => (
-  <ErrorBoundary>
+const App = () => {
+  const [booted, setBooted] = useState(false);
+
+  useEffect(() => {
+    setBooted(true);
+  }, []);
+
+  return (
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
@@ -109,12 +122,18 @@ const App = () => (
             <Toaster />
             <Sonner />
             <PWAInstallPrompt />
+            {booted && (
+              <div className="fixed bottom-2 right-2 z-50 rounded bg-emerald-500/90 px-2 py-1 text-[10px] font-semibold tracking-wide text-white shadow">
+                BOOT OK
+              </div>
+            )}
             <BrowserRouter>
               <CookieConsentBanner />
               <EnhancedTrackingConsent />
               {/* AuthRouter wraps all routes for centralized routing logic */}
               <AuthRouter>
-                <Routes>
+                <Suspense fallback={routeFallback}>
+                  <Routes>
                   {/* Public Routes */}
                   <Route path="/" element={<Index />} />
                   <Route path="/blog" element={<Blog />} />
@@ -214,14 +233,15 @@ const App = () => (
                   
                   {/* Catch all - 404 */}
                   <Route path="*" element={<NotFound />} />
-                </Routes>
+                  </Routes>
+                </Suspense>
               </AuthRouter>
             </BrowserRouter>
           </VisitorProvider>
         </TooltipProvider>
       </QueryClientProvider>
     </HelmetProvider>
-  </ErrorBoundary>
-);
+  );
+};
 
 export default App;
