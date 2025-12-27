@@ -43,6 +43,8 @@ const formatQualityDelta = (value: number | null) => {
   return `${sign}${value.toFixed(2)}`;
 };
 
+const EMPTY_ECONOMIC_AUDITS: RuntimeSnapshot["data"]["economicAudits"] = [];
+
 export default function ControlRoom() {
   const { userId, email } = useAuth();
   const identityKey = useMemo(() => computeIdentityKey(userId, email), [userId, email]);
@@ -94,7 +96,7 @@ export default function ControlRoom() {
   const safeModeReasons = snapshot?.safeModeReasons ?? [];
   const rolePolicies = snapshot?.data.rolePolicies ?? [];
   const economicBudget = snapshot?.data.economicBudget ?? null;
-  const economicAudits = snapshot?.data.economicAudits ?? [];
+  const economicAudits = useMemo(() => snapshot?.data.economicAudits ?? EMPTY_ECONOMIC_AUDITS, [snapshot?.data.economicAudits]);
 
   const candidateTaskTypes = useMemo(() => {
     const types = new Set<string>();
