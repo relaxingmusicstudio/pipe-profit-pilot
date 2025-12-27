@@ -217,6 +217,120 @@ export const AgentProfileSchema = z
   .strict();
 export type AgentProfile = z.infer<typeof AgentProfileSchema>;
 
+export const RoleJurisdictionSchema = z
+  .object({
+    domains: z.array(z.string().min(1)).min(1),
+    actions: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+export type RoleJurisdiction = z.infer<typeof RoleJurisdictionSchema>;
+
+export const RoleAuthorityCeilingSchema = z
+  .object({
+    maxPermissionTier: PermissionTierSchema,
+    maxTaskClass: TaskClassSchema,
+    maxImpact: ActionImpactSchema,
+    maxEstimatedCostCents: z.number().int().nonnegative(),
+  })
+  .strict();
+export type RoleAuthorityCeiling = z.infer<typeof RoleAuthorityCeilingSchema>;
+
+export const RoleEscalationRulesSchema = z
+  .object({
+    alwaysEscalateActions: z.array(z.string()).default([]),
+    alwaysEscalateDomains: z.array(z.string()).default([]),
+    escalateAboveTaskClass: TaskClassSchema.optional(),
+    escalateAboveImpact: ActionImpactSchema.optional(),
+    escalateAboveCostCents: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type RoleEscalationRules = z.infer<typeof RoleEscalationRulesSchema>;
+
+export const RoleChainOfCommandSchema = z
+  .object({
+    canRequestFromRoles: z.array(z.string()).default([]),
+    canApproveForRoles: z.array(z.string()).default([]),
+  })
+  .strict();
+export type RoleChainOfCommand = z.infer<typeof RoleChainOfCommandSchema>;
+
+export const RoleDataAccessSchema = z
+  .object({
+    allowedCategories: z.array(z.string()).default([]),
+  })
+  .strict();
+export type RoleDataAccess = z.infer<typeof RoleDataAccessSchema>;
+
+export const RoleToolAccessSchema = z
+  .object({
+    allowedTools: z.array(z.string()).default([]),
+    allowedContracts: z.array(z.string()).default([]),
+  })
+  .strict();
+export type RoleToolAccess = z.infer<typeof RoleToolAccessSchema>;
+
+export const RoleAuditRequirementsSchema = z
+  .object({
+    requiredFields: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+export type RoleAuditRequirements = z.infer<typeof RoleAuditRequirementsSchema>;
+
+export const RolePolicySchema = z
+  .object({
+    policyId: z.string().min(1),
+    roleId: z.string().min(1),
+    roleName: z.string().min(1),
+    version: z.string().min(1),
+    jurisdiction: RoleJurisdictionSchema,
+    authorityCeiling: RoleAuthorityCeilingSchema,
+    deniedActions: z.array(z.string()).default([]),
+    escalationRules: RoleEscalationRulesSchema,
+    chainOfCommand: RoleChainOfCommandSchema,
+    dataAccess: RoleDataAccessSchema,
+    toolAccess: RoleToolAccessSchema,
+    auditRequirements: RoleAuditRequirementsSchema,
+    createdAt: ISODateSchema,
+    updatedAt: ISODateSchema,
+  })
+  .strict();
+export type RolePolicy = z.infer<typeof RolePolicySchema>;
+
+export const RoleConstitutionDecisionSchema = z
+  .object({
+    decision: z.enum(["allow", "deny", "escalate"]),
+    reasonCode: z.string().min(1),
+    roleId: z.string().min(1),
+    policyId: z.string().min(1),
+    policyVersion: z.string().min(1),
+    timestamp: ISODateSchema,
+  })
+  .strict();
+export type RoleConstitutionDecision = z.infer<typeof RoleConstitutionDecisionSchema>;
+
+export const RoleConstitutionAuditRecordSchema = z
+  .object({
+    auditId: z.string().min(1),
+    identityKey: z.string().min(1),
+    roleId: z.string().min(1),
+    roleName: z.string().min(1),
+    policyId: z.string().min(1),
+    policyVersion: z.string().min(1),
+    action: z.string().min(1),
+    domain: z.string().min(1),
+    tool: z.string().min(1).optional(),
+    decision: z.enum(["allow", "deny", "escalate"]),
+    reasonCode: z.string().min(1),
+    requestedByRoleId: z.string().min(1).optional(),
+    requestedByAgentId: z.string().min(1).optional(),
+    taskClass: TaskClassSchema.optional(),
+    impact: ActionImpactSchema.optional(),
+    estimatedCostCents: z.number().int().nonnegative().optional(),
+    createdAt: ISODateSchema,
+  })
+  .strict();
+export type RoleConstitutionAuditRecord = z.infer<typeof RoleConstitutionAuditRecordSchema>;
+
 export const AgentProposalSchema = z
   .object({
     proposalId: z.string().min(1),
@@ -1409,6 +1523,9 @@ export const CONTRACTS = {
   memoryRecord: MemoryRecordSchema,
   toolUsageEvent: ToolUsageEventSchema,
   agentProfile: AgentProfileSchema,
+  rolePolicy: RolePolicySchema,
+  roleConstitutionDecision: RoleConstitutionDecisionSchema,
+  roleConstitutionAuditRecord: RoleConstitutionAuditRecordSchema,
   disagreementRecord: DisagreementRecordSchema,
   refereeDecision: RefereeDecisionSchema,
   handoffContract: HandoffContractSchema,

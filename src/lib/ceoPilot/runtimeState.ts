@@ -28,6 +28,10 @@ import {
   HumanControlProfileSchema,
   HumanDecisionRecord,
   HumanDecisionRecordSchema,
+  RolePolicy,
+  RolePolicySchema,
+  RoleConstitutionAuditRecord,
+  RoleConstitutionAuditRecordSchema,
   ValueAnchor,
   ValueAnchorSchema,
   DriftReport,
@@ -70,6 +74,7 @@ import {
 } from "./contracts";
 import { createId, nowIso } from "./utils";
 import { DEFAULT_VALUE_ANCHORS } from "./valueAnchors";
+import { DEFAULT_ROLE_POLICIES } from "./rolePolicies";
 
 type StorageLike = {
   getItem: (key: string) => string | null;
@@ -133,6 +138,8 @@ const HUMAN_DECISION_PREFIX = "ppp:ceoPilot:humanDecisions:v1::";
 const VALUE_ANCHOR_PREFIX = "ppp:ceoPilot:valueAnchors:v1::";
 const DRIFT_REPORT_PREFIX = "ppp:ceoPilot:driftReports:v1::";
 const VALUE_REAFFIRM_PREFIX = "ppp:ceoPilot:valueReaffirmations:v1::";
+const ROLE_POLICY_PREFIX = "ppp:ceoPilot:rolePolicies:v1::";
+const ROLE_CONSTITUTION_AUDIT_PREFIX = "ppp:ceoPilot:roleConstitutionAudits:v1::";
 
 const DEFAULT_GOAL_IDS = {
   systemIntegrity: "goal-system-integrity",
@@ -425,6 +432,61 @@ export const upsertValueAnchor = (
   const existing = loadValueAnchors(identityKey, storage);
   const next = [...existing.filter((item) => item.anchorId !== anchor.anchorId), parsed.data];
   return saveValueAnchors(identityKey, next, storage);
+};
+
+export const loadRolePolicies = (
+  identityKey: string,
+  storage: StorageLike = getStorage()
+): RolePolicy[] => {
+  const raw = storage.getItem(`${ROLE_POLICY_PREFIX}${identityKey}`);
+  const parsed = readJson<RolePolicy[]>(raw, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((policy) => RolePolicySchema.safeParse(policy).success);
+};
+
+export const saveRolePolicies = (
+  identityKey: string,
+  policies: RolePolicy[],
+  storage: StorageLike = getStorage()
+): RolePolicy[] => {
+  const filtered = policies.filter((policy) => RolePolicySchema.safeParse(policy).success);
+  try {
+    storage.setItem(`${ROLE_POLICY_PREFIX}${identityKey}`, JSON.stringify(filtered));
+  } catch {
+    // ignore persistence errors
+  }
+  return filtered;
+};
+
+export const ensureDefaultRolePolicies = (
+  identityKey: string,
+  storage: StorageLike = getStorage()
+): RolePolicy[] => {
+  const existing = loadRolePolicies(identityKey, storage);
+  if (existing.length > 0) return existing;
+  const seeded = DEFAULT_ROLE_POLICIES.map((policy) => ({
+    ...policy,
+    createdAt: policy.createdAt || nowIso(),
+    updatedAt: policy.updatedAt || nowIso(),
+  }));
+  try {
+    storage.setItem(`${ROLE_POLICY_PREFIX}${identityKey}`, JSON.stringify(seeded));
+  } catch {
+    // ignore persistence errors
+  }
+  return seeded;
+};
+
+export const upsertRolePolicy = (
+  identityKey: string,
+  policy: RolePolicy,
+  storage: StorageLike = getStorage()
+): RolePolicy[] => {
+  const parsed = RolePolicySchema.safeParse(policy);
+  if (!parsed.success) return loadRolePolicies(identityKey, storage);
+  const existing = loadRolePolicies(identityKey, storage);
+  const next = [...existing.filter((item) => item.policyId !== policy.policyId), parsed.data];
+  return saveRolePolicies(identityKey, next, storage);
 };
 
 export const loadGoalConflicts = (
@@ -1617,6 +1679,43 @@ export const recordHumanDecision = (
   const history = loadHumanDecisions(identityKey, storage);
   const next = [...history, parsed.data].slice(-maxEntries);
   return saveHumanDecisions(identityKey, next, storage);
+};
+
+export const loadRoleConstitutionAudits = (
+  identityKey: string,
+  storage: StorageLike = getStorage()
+): RoleConstitutionAuditRecord[] => {
+  const raw = storage.getItem(`${ROLE_CONSTITUTION_AUDIT_PREFIX}${identityKey}`);
+  const parsed = readJson<RoleConstitutionAuditRecord[]>(raw, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((record) => RoleConstitutionAuditRecordSchema.safeParse(record).success);
+};
+
+export const saveRoleConstitutionAudits = (
+  identityKey: string,
+  records: RoleConstitutionAuditRecord[],
+  storage: StorageLike = getStorage()
+): RoleConstitutionAuditRecord[] => {
+  const filtered = records.filter((record) => RoleConstitutionAuditRecordSchema.safeParse(record).success);
+  try {
+    storage.setItem(`${ROLE_CONSTITUTION_AUDIT_PREFIX}${identityKey}`, JSON.stringify(filtered));
+  } catch {
+    // ignore persistence errors
+  }
+  return filtered;
+};
+
+export const recordRoleConstitutionAudit = (
+  identityKey: string,
+  record: RoleConstitutionAuditRecord,
+  storage: StorageLike = getStorage(),
+  maxEntries: number = 300
+): RoleConstitutionAuditRecord[] => {
+  const parsed = RoleConstitutionAuditRecordSchema.safeParse(record);
+  if (!parsed.success) return loadRoleConstitutionAudits(identityKey, storage);
+  const history = loadRoleConstitutionAudits(identityKey, storage);
+  const next = [...history, parsed.data].slice(-maxEntries);
+  return saveRoleConstitutionAudits(identityKey, next, storage);
 };
 
 export const loadValueReaffirmations = (

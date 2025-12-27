@@ -11,6 +11,8 @@ import {
   ModelTier,
   NormAssessment,
   PermissionTier,
+  RoleConstitutionAuditRecord,
+  RoleConstitutionDecision,
   SecondOrderEffects,
   SchedulingPolicy,
   TaskClass,
@@ -62,6 +64,7 @@ import {
 } from "./runtimeState";
 import { assertCostContext } from "./costUtils";
 import { nowIso } from "./utils";
+import { enforceRoleConstitution } from "./roleConstitution";
 
 export type AgentRuntimeMetrics = {
   uncertaintyVariance: number;
@@ -93,6 +96,7 @@ export type AgentRuntimeContext = {
   schedulingPolicy?: SchedulingPolicy;
   explorationMode?: boolean;
   actionTags?: string[];
+  dataCategories?: string[];
   secondOrderEffects?: SecondOrderEffects;
   longHorizonCommitment?: LongHorizonCommitment;
   normJustification?: string;
@@ -161,6 +165,10 @@ export type RuntimeGovernanceDecision = {
     };
     scope?: { allowed: boolean; reason?: string };
     handoff?: { allowed: boolean; reason?: string };
+    roleConstitution?: {
+      decision: RoleConstitutionDecision;
+      audit: RoleConstitutionAuditRecord;
+    };
     disagreement?: {
       disagreementId: string;
       refereeDecisionId: string;
@@ -388,6 +396,34 @@ export const enforceRuntimeGovernance = async (
     return {
       allowed: false,
       reason: "human_autonomy_ceiling",
+      requiresHumanReview: true,
+      details,
+    };
+  }
+
+  const roleConstitution = enforceRoleConstitution({
+    identityKey,
+    agentContext: context,
+    requestedTool: context.tool,
+    requestedAction: context.decisionType,
+    now,
+  });
+  details.roleConstitution = {
+    decision: roleConstitution.decision,
+    audit: roleConstitution.audit,
+  };
+  if (roleConstitution.decision.decision === "deny") {
+    return {
+      allowed: false,
+      reason: "role_constitution_denied",
+      requiresHumanReview: true,
+      details,
+    };
+  }
+  if (roleConstitution.decision.decision === "escalate" && initiator !== "human") {
+    return {
+      allowed: false,
+      reason: "role_constitution_escalation",
       requiresHumanReview: true,
       details,
     };

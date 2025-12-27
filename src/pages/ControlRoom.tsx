@@ -92,6 +92,7 @@ export default function ControlRoom() {
 
   const safeMode = snapshot?.safeMode ?? true;
   const safeModeReasons = snapshot?.safeModeReasons ?? [];
+  const rolePolicies = snapshot?.data.rolePolicies ?? [];
 
   const candidateTaskTypes = useMemo(() => {
     const types = new Set<string>();
@@ -134,6 +135,14 @@ export default function ControlRoom() {
       return true;
     });
   }, [snapshot, actionFilter, taskTypeFilter]);
+
+  const roleEscalations = useMemo(() => {
+    const audits = snapshot?.data.roleConstitutionAudits ?? [];
+    return audits
+      .filter((audit) => audit.decision === "escalate")
+      .slice()
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }, [snapshot?.data.roleConstitutionAudits]);
 
   const handleDecision = (targetType: "improvement_candidate" | "distilled_rule", targetId: string, decision: "approve" | "reject" | "request_more_evidence" | "escalate") => {
     if (!identityKey) return;
@@ -292,6 +301,7 @@ export default function ControlRoom() {
             <TabsTrigger value="costs">Costs/Budgets</TabsTrigger>
             <TabsTrigger value="improvements">Improvement Queue</TabsTrigger>
             <TabsTrigger value="interpretability">Interpretability</TabsTrigger>
+            <TabsTrigger value="roles">Role Constitution</TabsTrigger>
             <TabsTrigger value="controls">Emergency & Controls</TabsTrigger>
             <TabsTrigger value="export">Export/Import</TabsTrigger>
           </TabsList>
@@ -864,6 +874,108 @@ export default function ControlRoom() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="roles" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Role Policies</CardTitle>
+                <CardDescription>Read-only jurisdiction and authority ceilings.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-xs">
+                {rolePolicies.length === 0 && (
+                  <div className="text-muted-foreground">No role policies loaded.</div>
+                )}
+                {rolePolicies.map((policy) => (
+                  <div key={policy.policyId} className="rounded-lg border border-border p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium">
+                          {policy.roleName} ({policy.roleId})
+                        </div>
+                        <div className="text-muted-foreground">Policy {policy.policyId}</div>
+                      </div>
+                      <Badge variant="secondary">{policy.version}</Badge>
+                    </div>
+                    <div className="mt-2 text-muted-foreground">
+                      Domains: {policy.jurisdiction.domains.join(", ")}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Actions: {policy.jurisdiction.actions.join(", ")}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Authority: tier ≤ {policy.authorityCeiling.maxPermissionTier} | class ≤{" "}
+                      {policy.authorityCeiling.maxTaskClass} | impact ≤ {policy.authorityCeiling.maxImpact} | cost ≤{" "}
+                      {formatCurrency(policy.authorityCeiling.maxEstimatedCostCents)}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Denied: {policy.deniedActions.length > 0 ? policy.deniedActions.join(", ") : "none"}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Escalate actions:{" "}
+                      {policy.escalationRules.alwaysEscalateActions.length > 0
+                        ? policy.escalationRules.alwaysEscalateActions.join(", ")
+                        : "none"}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Escalate domains:{" "}
+                      {policy.escalationRules.alwaysEscalateDomains.length > 0
+                        ? policy.escalationRules.alwaysEscalateDomains.join(", ")
+                        : "none"}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Chain: request from [{policy.chainOfCommand.canRequestFromRoles.join(", ") || "none"}] | approve for [
+                      {policy.chainOfCommand.canApproveForRoles.join(", ") || "none"}]
+                    </div>
+                    <div className="text-muted-foreground">
+                      Data access: {policy.dataAccess.allowedCategories.join(", ") || "none"}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Tools: {policy.toolAccess.allowedTools.join(", ") || "none"}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Escalated Decisions</CardTitle>
+                <CardDescription>Role constitution escalations requiring human review.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-xs">
+                {roleEscalations.length === 0 ? (
+                  <div className="text-muted-foreground">No escalations recorded.</div>
+                ) : (
+                  <div className="rounded-lg border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">When</TableHead>
+                          <TableHead className="text-xs">Role</TableHead>
+                          <TableHead className="text-xs">Action</TableHead>
+                          <TableHead className="text-xs">Domain</TableHead>
+                          <TableHead className="text-xs">Tool</TableHead>
+                          <TableHead className="text-xs">Reason</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {roleEscalations.map((audit) => (
+                          <TableRow key={audit.auditId}>
+                            <TableCell className="text-xs">{formatDateTime(audit.createdAt)}</TableCell>
+                            <TableCell className="text-xs">{audit.roleId}</TableCell>
+                            <TableCell className="text-xs">{audit.action}</TableCell>
+                            <TableCell className="text-xs">{audit.domain}</TableCell>
+                            <TableCell className="text-xs">{audit.tool ?? "n/a"}</TableCell>
+                            <TableCell className="text-xs">{audit.reasonCode}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="controls" className="space-y-6">

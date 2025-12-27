@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RoleConstitutionAuditRecord",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "auditId",
+    "identityKey",
+    "roleId",
+    "roleName",
+    "policyId",
+    "policyVersion",
+    "action",
+    "domain",
+    "decision",
+    "reasonCode",
+    "createdAt"
+  ],
+  "properties": {
+    "auditId": { "type": "string", "minLength": 1 },
+    "identityKey": { "type": "string", "minLength": 1 },
+    "roleId": { "type": "string", "minLength": 1 },
+    "roleName": { "type": "string", "minLength": 1 },
+    "policyId": { "type": "string", "minLength": 1 },
+    "policyVersion": { "type": "string", "minLength": 1 },
+    "action": { "type": "string", "minLength": 1 },
+    "domain": { "type": "string", "minLength": 1 },
+    "tool": { "type": "string", "minLength": 1 },
+    "decision": { "type": "string", "enum": ["allow", "deny", "escalate"] },
+    "reasonCode": { "type": "string", "minLength": 1 },
+    "requestedByRoleId": { "type": "string", "minLength": 1 },
+    "requestedByAgentId": { "type": "string", "minLength": 1 },
+    "taskClass": { "type": "string", "enum": ["routine", "novel", "high_risk"] },
+    "impact": { "type": "string", "enum": ["reversible", "difficult", "irreversible"] },
+    "estimatedCostCents": { "type": "integer", "minimum": 0 },
+    "createdAt": { "type": "string", "format": "date-time" }
+  }
+}

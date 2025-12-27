@@ -8,6 +8,7 @@ import type {
   PermissionTier,
   TaskOutcomeRecord,
   ValueReaffirmationRecord,
+  RoleConstitutionAuditRecord,
 } from "./contracts";
 import { applyImprovementCandidate, rollbackImprovementCandidate } from "./improvement";
 import { setEmergencyMode, clearEmergencyModeState } from "./emergencyMode";
@@ -17,6 +18,7 @@ import {
   ensureDefaultCostBudgets,
   ensureDefaultHumanControls,
   ensureDefaultValueAnchors,
+  ensureDefaultRolePolicies,
   loadBehaviorFreezes,
   loadCacheEntries,
   loadCachePreferences,
@@ -38,6 +40,8 @@ import {
   loadModelRoutingHistory,
   loadQualityMetrics,
   loadQualityRegressions,
+  loadRolePolicies,
+  loadRoleConstitutionAudits,
   loadRoutingPreferences,
   loadSchedulingPreferences,
   loadScheduledTasks,
@@ -66,6 +70,8 @@ import {
   saveModelRoutingHistory,
   saveQualityMetrics,
   saveQualityRegressions,
+  saveRolePolicies,
+  saveRoleConstitutionAudits,
   saveRoutingPreferences,
   saveSchedulingPreferences,
   saveScheduledTasks,
@@ -155,6 +161,8 @@ export type RuntimeSnapshot = {
     valueAnchors: ReturnType<typeof loadValueAnchors>;
     driftReports: ReturnType<typeof loadDriftReports>;
     valueReaffirmations: ReturnType<typeof loadValueReaffirmations>;
+    rolePolicies: ReturnType<typeof loadRolePolicies>;
+    roleConstitutionAudits: RoleConstitutionAuditRecord[];
   };
 };
 
@@ -186,6 +194,7 @@ export const getRuntimeSnapshot = (identityKey: string, now: string = nowIso()):
   const costBudgets = ensureDefaultCostBudgets(identityKey);
   const humanControls = ensureDefaultHumanControls(identityKey);
   const valueAnchors = ensureDefaultValueAnchors(identityKey);
+  const rolePolicies = ensureDefaultRolePolicies(identityKey);
   const emergencyMode = loadEmergencyMode(identityKey);
   const outcomes = loadTaskOutcomes(identityKey);
   const improvementCandidates = loadImprovementCandidates(identityKey);
@@ -204,6 +213,7 @@ export const getRuntimeSnapshot = (identityKey: string, now: string = nowIso()):
   if (humanControls.length === 0) safeModeReasons.push("missing_human_controls");
   if (valueAnchors.length === 0) safeModeReasons.push("missing_value_anchors");
   if (driftReports.length === 0) safeModeReasons.push("missing_drift_reports");
+  if (rolePolicies.length === 0) safeModeReasons.push("missing_role_policies");
   if (improvementCandidates.length === 0) safeModeReasons.push("missing_improvement_candidates");
   if (causalChains.length === 0) safeModeReasons.push("missing_causal_chains");
 
@@ -250,6 +260,8 @@ export const getRuntimeSnapshot = (identityKey: string, now: string = nowIso()):
       valueAnchors,
       driftReports,
       valueReaffirmations,
+      rolePolicies,
+      roleConstitutionAudits: loadRoleConstitutionAudits(identityKey),
     },
   };
 };
@@ -537,6 +549,8 @@ export const importState = (payload: RuntimeStateExport, identityKey?: string) =
   saveValueAnchors(targetKey, data.valueAnchors ?? []);
   saveDriftReports(targetKey, data.driftReports ?? []);
   saveValueReaffirmations(targetKey, data.valueReaffirmations ?? []);
+  saveRolePolicies(targetKey, data.rolePolicies ?? []);
+  saveRoleConstitutionAudits(targetKey, data.roleConstitutionAudits ?? []);
 
   return getRuntimeSnapshot(targetKey);
 };
